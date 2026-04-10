@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply min-h-screen bg-white text-slate-900 antialiased;
+}
+
+/* react-datepicker above modal (z-50) */
+.react-datepicker-popper-z {
+  z-index: 200 !important;
+}

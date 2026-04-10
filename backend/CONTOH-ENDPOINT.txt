@@ -1,0 +1,40 @@
+Base: http://localhost:3001/api
+Header auth: Authorization: Bearer <token_jwt>
+
+POST   /auth/login
+       Body JSON: { "username": "owner", "password": "owner123" }
+
+GET    /auth/me
+
+GET    /users                    (owner, supervisor)
+GET    /users/workers            (owner, supervisor)
+
+GET    /admin/users              (owner saja) Query: page, limit (maks 10), search (LIKE username)
+       Response: { data, total, page, limit, totalPages }
+POST   /admin/users              Body: { "username", "password", "role" }
+PUT    /admin/users/:id          Body: { "username"?, "password"?, "role"? }
+DELETE /admin/users/:id          (tidak boleh diri sendiri / hapus owner terakhir)
+
+GET    /orders
+GET    /orders/:id
+POST   /orders                   (owner, supervisor)
+PUT    /orders/:id               (owner, supervisor)
+DELETE /orders/:id               (owner saja)
+
+POST   /orders/:id/images        multipart field "images" max 2 file
+DELETE /order-images/:imageId    (owner, supervisor)
+
+POST   /orders/:id/workflow-steps
+       Body: { "nama_step": "...", "assigned_worker_id": null | number }
+
+PUT    /workflow-steps/:stepId
+       Body: { "status": "pending"|"progress"|"done", "assigned_worker_id", "nama_step" }
+
+DELETE /workflow-steps/:stepId   (owner, supervisor)
+
+GET    /my-tasks                 Query: page, limit (maks 10), search (nama pemesan / nama tahap / id pesanan)
+       Response: { data, total, page, limit, totalPages }
+
+GET    /dashboard/summary
+
+File statis gambar: GET http://localhost:3001/uploads/<namafile>
