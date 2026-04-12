@@ -24,6 +24,7 @@ function toYmd(date) {
 }
 
 const emptyStep = () => ({
+  _id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
   nama_step: '',
   keterangan: '',
   harga_pekerjaan: '',
@@ -148,6 +149,13 @@ export function OrdersPage() {
     });
   }
 
+  function removeStepAt(index) {
+    setSteps((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
   async function handleSubmitOrder(e) {
     e.preventDefault();
     if (!orderModal) return;
@@ -171,6 +179,11 @@ export function OrdersPage() {
             })(),
             assigned_worker_id: s.assigned_worker_id ? Number(s.assigned_worker_id) : null,
           }));
+        if (workflow_steps.length === 0) {
+          toast.error('Minimal satu tahap dengan nama wajib diisi');
+          setSaving(false);
+          return;
+        }
         await api.post('/orders', { ...payload, workflow_steps });
         toast.success('Pesanan berhasil dibuat');
       } else {
@@ -357,7 +370,7 @@ export function OrdersPage() {
                 <div className="mt-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-medium text-batik-ink">
-                      Tahapan workflow (tambah baris jika perlu)
+                      Tahapan workflow (minimal 1, Tambah tahapan jika diperlukan)
                     </p>
                     <button
                       type="button"
@@ -370,9 +383,21 @@ export function OrdersPage() {
                   <div className="mt-2 space-y-3">
                     {steps.map((s, i) => (
                       <div
-                        key={i}
+                        key={s._id}
                         className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2"
                       >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-xs font-medium text-slate-400">Tahap {i + 1}</span>
+                          <button
+                            type="button"
+                            title={steps.length <= 1 ? 'Minimal satu baris tahap' : 'Hapus baris ini'}
+                            disabled={steps.length <= 1}
+                            onClick={() => removeStepAt(i)}
+                            className="inline-flex shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        </div>
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                           <div className="min-w-0 flex-1">
                             <label className="text-xs text-slate-500">Nama tahap</label>
