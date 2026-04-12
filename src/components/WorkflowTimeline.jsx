@@ -1,5 +1,6 @@
 import { StatusBadge } from './StatusBadge';
 import { formatDateTime } from '../utils/formatDate';
+import { formatIdr } from '../utils/formatMoney';
 
 export function WorkflowTimeline({ steps }) {
   if (!steps?.length) {
@@ -29,6 +30,18 @@ export function WorkflowTimeline({ steps }) {
               <div>
                 <dt className="text-xs text-slate-400">Pekerja</dt>
                 <dd className="font-medium text-slate-800">{step.assigned_username || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Cuaca</dt>
+                <dd className="capitalize">{step.cuaca || '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-slate-400">Keterangan</dt>
+                <dd>{step.keterangan?.trim() || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Harga</dt>
+                <dd>{formatIdr(step.harga_pekerjaan)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Mulai</dt>

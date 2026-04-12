@@ -6,6 +6,7 @@ import {
   LogOut,
   Factory,
   Users,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../constants/routes';
@@ -35,7 +36,7 @@ export function MainLayout() {
               Produksi
             </p>
             <h1 className="text-base font-semibold leading-tight text-white md:text-lg">
-              Batik Workflow
+              Batik Binar
             </h1>
           </div>
         </div>
@@ -52,6 +53,12 @@ export function MainLayout() {
             <ListTodo className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
             <span>Tugas saya</span>
           </NavLink>
+          {manager && (
+            <NavLink to={ROUTES.dailyWages} className={linkClass}>
+              <Wallet className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+              <span>Gaji harian</span>
+            </NavLink>
+          )}
           {owner && (
             <NavLink to={ROUTES.adminUsers} className={linkClass}>
               <Users className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />

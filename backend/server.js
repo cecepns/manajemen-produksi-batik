@@ -39,12 +39,16 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { files: 2, fileSize: 5 * 1024 * 1024 },
+  limits: { files: 8, fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ok = /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype);
     cb(ok ? null : new Error('Hanya gambar (jpeg, png, webp, gif)'), ok);
   },
 });
+
+const MAX_FOTO_AWAL = 6;
+const MAX_FOTO_AKHIR = 6;
+const CUACA_VALUES = new Set(['terang', 'mendung', 'hujan']);
 
 function authMiddleware(req, res, next) {
   const h = req.headers.authorization;
@@ -75,7 +79,9 @@ function isManager(role) {
 async function canAccessOrder(user, orderId) {
   if (isManager(user.role)) return true;
   const [rows] = await pool.query(
-    `SELECT 1 FROM workflow_steps WHERE order_id = ? AND assigned_worker_id = ? LIMIT 1`,
+    `SELECT 1 FROM workflow_steps
+     WHERE order_id = ? AND assigned_worker_id = ? AND status <> 'done'
+     LIMIT 1`,
     [orderId, user.sub]
   );
   return rows.length > 0;
@@ -333,7 +339,9 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
     } else {
       [rows] = await pool.query(
         `SELECT DISTINCT o.* FROM orders o
-         INNER JOIN workflow_steps ws ON ws.order_id = o.id AND ws.assigned_worker_id = ?
+         INNER JOIN workflow_steps ws ON ws.order_id = o.id
+           AND ws.assigned_worker_id = ?
+           AND ws.status <> 'done'
          ORDER BY o.tanggal_pesanan DESC, o.id DESC`,
         [sub]
       );
@@ -378,6 +386,7 @@ app.post('/api/orders', authMiddleware, requireRole('owner', 'supervisor'), asyn
   const conn = await pool.getConnection();
   try {
     const {
+      nama_usaha,
       nama_pemesan,
       tanggal_pesanan,
       deadline,
@@ -391,11 +400,17 @@ app.post('/api/orders', authMiddleware, requireRole('owner', 'supervisor'), asyn
       return res.status(400).json({ message: 'Field wajib belum lengkap' });
     }
 
+    const usaha =
+      typeof nama_usaha === 'string' && nama_usaha.trim()
+        ? nama_usaha.trim()
+        : 'Batik Binar';
+
     await conn.beginTransaction();
     const [r] = await conn.query(
-      `INSERT INTO orders (nama_pemesan, tanggal_pesanan, deadline, jumlah, penanggung_jawab, resep)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (nama_usaha, nama_pemesan, tanggal_pesanan, deadline, jumlah, penanggung_jawab, resep)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
+        usaha,
         nama_pemesan,
         tanggal_pesanan,
         deadline,
@@ -411,10 +426,19 @@ app.post('/api/orders', authMiddleware, requireRole('owner', 'supervisor'), asyn
       const name = s?.nama_step?.trim();
       if (!name) continue;
       const wid = s?.assigned_worker_id ? Number(s.assigned_worker_id) : null;
+      const ket =
+        s?.keterangan != null && String(s.keterangan).trim()
+          ? String(s.keterangan).trim()
+          : null;
+      let harga = null;
+      if (s?.harga_pekerjaan != null && s.harga_pekerjaan !== '') {
+        const n = Number(s.harga_pekerjaan);
+        harga = Number.isFinite(n) ? n : null;
+      }
       await conn.query(
-        `INSERT INTO workflow_steps (order_id, nama_step, assigned_worker_id, status)
-         VALUES (?, ?, ?, 'pending')`,
-        [orderId, name, wid || null]
+        `INSERT INTO workflow_steps (order_id, nama_step, keterangan, harga_pekerjaan, assigned_worker_id, status)
+         VALUES (?, ?, ?, ?, ?, 'pending')`,
+        [orderId, name, ket, harga, wid || null]
       );
     }
 
@@ -436,6 +460,7 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
     if (!id) return res.status(400).json({ message: 'ID tidak valid' });
 
     const {
+      nama_usaha,
       nama_pemesan,
       tanggal_pesanan,
       deadline,
@@ -447,11 +472,18 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
     const [[cur]] = await pool.query('SELECT * FROM orders WHERE id = ?', [id]);
     if (!cur) return res.status(404).json({ message: 'Pesanan tidak ditemukan' });
 
+    const nextUsaha =
+      nama_usaha !== undefined
+        ? String(nama_usaha || '').trim() || 'Batik Binar'
+        : cur.nama_usaha ?? 'Batik Binar';
+
     await pool.query(
       `UPDATE orders SET
+        nama_usaha = ?,
         nama_pemesan = ?, tanggal_pesanan = ?, deadline = ?, jumlah = ?, penanggung_jawab = ?, resep = ?
        WHERE id = ?`,
       [
+        nextUsaha,
         nama_pemesan !== undefined ? nama_pemesan : cur.nama_pemesan,
         tanggal_pesanan !== undefined ? tanggal_pesanan : cur.tanggal_pesanan,
         deadline !== undefined ? deadline : cur.deadline,
@@ -486,31 +518,37 @@ app.post(
   '/api/orders/:id/images',
   authMiddleware,
   requireRole('owner', 'supervisor'),
-  upload.array('images', 2),
+  upload.array('images', 8),
   async (req, res) => {
     try {
       const orderId = Number(req.params.id);
       if (!orderId) return res.status(400).json({ message: 'ID tidak valid' });
 
+      const jenisRaw = String(req.body?.jenis || 'foto_awal').trim();
+      const jenis = jenisRaw === 'foto_akhir' ? 'foto_akhir' : 'foto_awal';
+      const maxPerJenis = jenis === 'foto_akhir' ? MAX_FOTO_AKHIR : MAX_FOTO_AWAL;
+
       const [cntRows] = await pool.query(
-        'SELECT COUNT(*) AS c FROM order_images WHERE order_id = ?',
-        [orderId]
+        'SELECT COUNT(*) AS c FROM order_images WHERE order_id = ? AND jenis = ?',
+        [orderId, jenis]
       );
       const existing = cntRows[0].c;
       const files = req.files || [];
-      if (existing + files.length > 2) {
+      if (existing + files.length > maxPerJenis) {
         for (const f of files) fs.unlinkSync(path.join(UPLOAD_DIR, f.filename));
-        return res.status(400).json({ message: 'Maksimal 2 gambar per pesanan' });
+        return res
+          .status(400)
+          .json({ message: `Maksimal ${maxPerJenis} gambar untuk ${jenis.replace('_', ' ')}` });
       }
 
       const inserted = [];
       for (const f of files) {
         const url = `/uploads/${f.filename}`;
         const [r] = await pool.query(
-          'INSERT INTO order_images (order_id, image_url) VALUES (?, ?)',
-          [orderId, url]
+          'INSERT INTO order_images (order_id, jenis, image_url) VALUES (?, ?, ?)',
+          [orderId, jenis, url]
         );
-        inserted.push({ id: r.insertId, order_id: orderId, image_url: url });
+        inserted.push({ id: r.insertId, order_id: orderId, jenis, image_url: url });
       }
       res.status(201).json(inserted);
     } catch (e) {
@@ -550,13 +588,20 @@ app.post(
   async (req, res) => {
     try {
       const orderId = Number(req.params.id);
-      const { nama_step, assigned_worker_id } = req.body || {};
+      const { nama_step, assigned_worker_id, keterangan, harga_pekerjaan } = req.body || {};
       if (!nama_step?.trim()) return res.status(400).json({ message: 'nama_step wajib' });
       const wid = assigned_worker_id ? Number(assigned_worker_id) : null;
+      const ket =
+        keterangan != null && String(keterangan).trim() ? String(keterangan).trim() : null;
+      let harga = null;
+      if (harga_pekerjaan != null && harga_pekerjaan !== '') {
+        const n = Number(harga_pekerjaan);
+        harga = Number.isFinite(n) ? n : null;
+      }
       const [r] = await pool.query(
-        `INSERT INTO workflow_steps (order_id, nama_step, assigned_worker_id, status)
-         VALUES (?, ?, ?, 'pending')`,
-        [orderId, nama_step.trim(), wid || null]
+        `INSERT INTO workflow_steps (order_id, nama_step, keterangan, harga_pekerjaan, assigned_worker_id, status)
+         VALUES (?, ?, ?, ?, ?, 'pending')`,
+        [orderId, nama_step.trim(), ket, harga, wid || null]
       );
       const [rows] = await pool.query(
         `SELECT ws.*, u.username AS assigned_username
@@ -576,7 +621,14 @@ app.post(
 app.put('/api/workflow-steps/:stepId', authMiddleware, async (req, res) => {
   try {
     const stepId = Number(req.params.stepId);
-    const { status, assigned_worker_id, nama_step } = req.body || {};
+    const {
+      status,
+      assigned_worker_id,
+      nama_step,
+      keterangan,
+      harga_pekerjaan,
+      cuaca,
+    } = req.body || {};
 
     const [steps] = await pool.query('SELECT * FROM workflow_steps WHERE id = ?', [stepId]);
     const step = steps[0];
@@ -591,8 +643,13 @@ app.put('/api/workflow-steps/:stepId', authMiddleware, async (req, res) => {
     }
 
     if (!manager) {
-      if (assigned_worker_id !== undefined || nama_step !== undefined) {
-        return res.status(403).json({ message: 'Worker hanya boleh ubah status' });
+      if (
+        assigned_worker_id !== undefined ||
+        nama_step !== undefined ||
+        keterangan !== undefined ||
+        harga_pekerjaan !== undefined
+      ) {
+        return res.status(403).json({ message: 'Worker hanya boleh ubah status dan cuaca' });
       }
     }
 
@@ -603,6 +660,30 @@ app.put('/api/workflow-steps/:stepId', authMiddleware, async (req, res) => {
       newAssign = assigned_worker_id === null || assigned_worker_id === ''
         ? null
         : Number(assigned_worker_id);
+    }
+
+    let newKet = step.keterangan;
+    if (manager && keterangan !== undefined) {
+      newKet = keterangan != null && String(keterangan).trim() ? String(keterangan).trim() : null;
+    }
+
+    let newHarga = step.harga_pekerjaan;
+    if (manager && harga_pekerjaan !== undefined) {
+      if (harga_pekerjaan === null || harga_pekerjaan === '') {
+        newHarga = null;
+      } else {
+        const n = Number(harga_pekerjaan);
+        newHarga = Number.isFinite(n) ? n : step.harga_pekerjaan;
+      }
+    }
+
+    let newCuaca = step.cuaca;
+    if (cuaca !== undefined) {
+      if (cuaca === null || cuaca === '') {
+        newCuaca = null;
+      } else if (CUACA_VALUES.has(String(cuaca))) {
+        newCuaca = String(cuaca);
+      }
     }
 
     let tanggal_mulai = step.tanggal_mulai;
@@ -625,10 +706,23 @@ app.put('/api/workflow-steps/:stepId', authMiddleware, async (req, res) => {
         status = ?,
         assigned_worker_id = ?,
         nama_step = ?,
+        keterangan = ?,
+        harga_pekerjaan = ?,
+        cuaca = ?,
         tanggal_mulai = ?,
         tanggal_selesai = ?
        WHERE id = ?`,
-      [newStatus, newAssign, newNama || step.nama_step, tanggal_mulai, tanggal_selesai, stepId]
+      [
+        newStatus,
+        newAssign,
+        newNama || step.nama_step,
+        newKet,
+        newHarga,
+        newCuaca,
+        tanggal_mulai,
+        tanggal_selesai,
+        stepId,
+      ]
     );
 
     const [updated] = await pool.query(
@@ -674,7 +768,7 @@ app.get('/api/my-tasks', authMiddleware, async (req, res) => {
     const rawSearch = String(req.query.search || '').trim();
     const forLike = rawSearch.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
-    let where = 'WHERE ws.assigned_worker_id = ?';
+    let where = "WHERE ws.assigned_worker_id = ? AND ws.status <> 'done'";
     const params = [userId];
     if (forLike) {
       where += ` AND (
@@ -722,6 +816,155 @@ app.get('/api/my-tasks', authMiddleware, async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+// --- Gaji harian pegawai ---
+function buildDailyWagesWhere(query) {
+  const conditions = [];
+  const params = [];
+  const from = String(query.from || '').trim();
+  const to = String(query.to || '').trim();
+  const workerId = query.worker_id ? Number(query.worker_id) : null;
+  if (from) {
+    conditions.push('dw.work_date >= ?');
+    params.push(from);
+  }
+  if (to) {
+    conditions.push('dw.work_date <= ?');
+    params.push(to);
+  }
+  if (workerId) {
+    conditions.push('dw.worker_id = ?');
+    params.push(workerId);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return { where, params };
+}
+
+app.get(
+  '/api/daily-wages',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    try {
+      const { where, params } = buildDailyWagesWhere(req.query);
+      const [rows] = await pool.query(
+        `SELECT dw.*, u.username AS worker_username
+         FROM daily_wages dw
+         INNER JOIN users u ON u.id = dw.worker_id
+         ${where}
+         ORDER BY dw.work_date DESC, dw.id DESC`,
+        params
+      );
+      const [[sumRow]] = await pool.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN dw.included_in_total = 1 THEN dw.amount ELSE 0 END), 0) AS total_included,
+           COALESCE(SUM(dw.amount), 0) AS total_all
+         FROM daily_wages dw
+         ${where}`,
+        params
+      );
+      res.json({
+        data: rows,
+        totalIncluded: Number(sumRow.total_included) || 0,
+        totalAll: Number(sumRow.total_all) || 0,
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+app.post(
+  '/api/daily-wages',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    try {
+      const { work_date, worker_id, jenis_pekerjaan, amount, included_in_total } = req.body || {};
+      if (!work_date || !worker_id) {
+        return res.status(400).json({ message: 'Tanggal dan pekerja wajib' });
+      }
+      const wid = Number(worker_id);
+      if (!wid) return res.status(400).json({ message: 'Pekerja tidak valid' });
+      const amt = Number(amount);
+      if (!Number.isFinite(amt) || amt < 0) {
+        return res.status(400).json({ message: 'Nominal tidak valid' });
+      }
+      const jenis = jenis_pekerjaan != null ? String(jenis_pekerjaan).trim() : '';
+      const inc =
+        included_in_total === false || included_in_total === 0 || included_in_total === '0'
+          ? 0
+          : 1;
+      const [r] = await pool.query(
+        `INSERT INTO daily_wages (work_date, worker_id, jenis_pekerjaan, amount, included_in_total)
+         VALUES (?, ?, ?, ?, ?)`,
+        [work_date, wid, jenis, amt, inc]
+      );
+      const [rows] = await pool.query(
+        `SELECT dw.*, u.username AS worker_username
+         FROM daily_wages dw
+         INNER JOIN users u ON u.id = dw.worker_id
+         WHERE dw.id = ?`,
+        [r.insertId]
+      );
+      res.status(201).json(rows[0]);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+app.patch(
+  '/api/daily-wages/:id',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!id) return res.status(400).json({ message: 'ID tidak valid' });
+      const { included_in_total } = req.body || {};
+      if (included_in_total === undefined) {
+        return res.status(400).json({ message: 'included_in_total wajib' });
+      }
+      const inc =
+        included_in_total === false || included_in_total === 0 || included_in_total === '0'
+          ? 0
+          : 1;
+      await pool.query('UPDATE daily_wages SET included_in_total = ? WHERE id = ?', [inc, id]);
+      const [rows] = await pool.query(
+        `SELECT dw.*, u.username AS worker_username
+         FROM daily_wages dw
+         INNER JOIN users u ON u.id = dw.worker_id
+         WHERE dw.id = ?`,
+        [id]
+      );
+      if (!rows[0]) return res.status(404).json({ message: 'Entri tidak ditemukan' });
+      res.json(rows[0]);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+app.delete(
+  '/api/daily-wages/:id',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const [r] = await pool.query('DELETE FROM daily_wages WHERE id = ?', [id]);
+      if (r.affectedRows === 0) return res.status(404).json({ message: 'Entri tidak ditemukan' });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
 
 // --- Dashboard ringkas ---
 app.get('/api/dashboard/summary', authMiddleware, async (req, res) => {

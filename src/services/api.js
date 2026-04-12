@@ -61,5 +61,6 @@ export const api = {
   postForm: (path, formData, opts) =>
     apiRequest('POST', path, { ...opts, body: formData, isFormData: true }),
   put: (path, body, opts) => apiRequest('PUT', path, { ...opts, body }),
+  patch: (path, body, opts) => apiRequest('PATCH', path, { ...opts, body }),
   delete: (path, opts) => apiRequest('DELETE', path, opts),
 };

@@ -66,6 +66,16 @@ export function MyTasksPage() {
     }
   }
 
+  async function setCuaca(stepId, cuaca) {
+    try {
+      await api.put(`/workflow-steps/${stepId}`, { cuaca: cuaca || null });
+      toast.success('Cuaca diperbarui');
+      setListVersion((v) => v + 1);
+    } catch (e) {
+      toast.error(e.message);
+    }
+  }
+
   const startItem = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const endItem = Math.min(page * PAGE_SIZE, total);
 
@@ -137,6 +147,22 @@ export function MyTasksPage() {
                       <option value="progress">Berjalan</option>
                       <option value="done">Selesai</option>
                     </select>
+                    <div className="w-full min-w-[10rem] sm:w-auto">
+                      <label className="sr-only" htmlFor={`cuaca-${t.id}`}>
+                        Cuaca
+                      </label>
+                      <select
+                        id={`cuaca-${t.id}`}
+                        className="w-full rounded-lg border border-batik-teal/20 px-2 py-1.5 text-sm capitalize"
+                        value={t.cuaca ?? ''}
+                        onChange={(e) => setCuaca(t.id, e.target.value)}
+                      >
+                        <option value="">Cuaca…</option>
+                        <option value="terang">Terang</option>
+                        <option value="mendung">Mendung</option>
+                        <option value="hujan">Hujan</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </li>
