@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import { format, isValid, parse } from 'date-fns';
@@ -73,6 +73,10 @@ export function OrdersPage() {
   /** @type {[File[], function]} */
   const [createFotoAwal, setCreateFotoAwal] = useState([]);
   const [compressingFoto, setCompressingFoto] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraVideoReady, setCameraVideoReady] = useState(false);
+  const cameraStreamRef = useRef(null);
+  const cameraVideoRef = useRef(null);
 
   const createFotoPreviewUrls = useMemo(
     () => createFotoAwal.map((f) => URL.createObjectURL(f)),
@@ -84,6 +88,84 @@ export function OrdersPage() {
       createFotoPreviewUrls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, [createFotoPreviewUrls]);
+
+  function stopCameraStream() {
+    const s = cameraStreamRef.current;
+    if (s) {
+      s.getTracks().forEach((t) => t.stop());
+      cameraStreamRef.current = null;
+    }
+    if (cameraVideoRef.current) {
+      cameraVideoRef.current.srcObject = null;
+    }
+    setCameraVideoReady(false);
+    setCameraOpen(false);
+  }
+
+  function markCameraVideoReady() {
+    const v = cameraVideoRef.current;
+    if (v && v.videoWidth >= 2 && v.videoHeight >= 2) {
+      setCameraVideoReady(true);
+    }
+  }
+
+  useEffect(() => {
+    if (!cameraOpen) return;
+    const video = cameraVideoRef.current;
+    const stream = cameraStreamRef.current;
+    if (!video || !stream) return;
+    video.srcObject = stream;
+    video.play().catch(() => {});
+    return () => {
+      video.srcObject = null;
+    };
+  }, [cameraOpen]);
+
+  useEffect(() => {
+    return () => {
+      const s = cameraStreamRef.current;
+      if (s) s.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  async function openDeviceCamera() {
+    if (compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE) return;
+    if (!window.isSecureContext) {
+      toast.error('Kamera membutuhkan HTTPS atau localhost');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error('Peramban tidak mendukung akses kamera');
+      return;
+    }
+    try {
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+      } catch {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user' },
+            audio: false,
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+      }
+      cameraStreamRef.current = stream;
+      setCameraVideoReady(false);
+      setCameraOpen(true);
+    } catch (e) {
+      toast.error(
+        e?.name === 'NotAllowedError'
+          ? 'Akses kamera ditolak. Aktifkan izin kamera di pengaturan peramban.'
+          : e?.message || 'Tidak bisa membuka kamera'
+      );
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -107,6 +189,7 @@ export function OrdersPage() {
   }, []);
 
   function resetOrderModal() {
+    stopCameraStream();
     setOrderModal(null);
     setForm(defaultForm());
     setSteps(defaultSteps());
@@ -116,6 +199,10 @@ export function OrdersPage() {
 
   function closeModal() {
     if (saving || compressingFoto) return;
+    if (cameraOpen) {
+      stopCameraStream();
+      return;
+    }
     resetOrderModal();
   }
 
@@ -206,6 +293,43 @@ export function OrdersPage() {
     } finally {
       setCompressingFoto(false);
     }
+  }
+
+  async function capturePhotoFromCamera() {
+    const video = cameraVideoRef.current;
+    if (!video || video.videoWidth < 2 || video.videoHeight < 2) {
+      toast.error('Kamera belum siap, tunggu sebentar');
+      return;
+    }
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      toast.error('Gagal mengambil foto');
+      return;
+    }
+    ctx.drawImage(video, 0, 0, w, h);
+    stopCameraStream();
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) {
+          toast.error('Gagal mengambil foto');
+          return;
+        }
+        const file = new File([blob], `kamera-${Date.now()}.jpg`, {
+          type: 'image/jpeg',
+          lastModified: Date.now(),
+        });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        await appendCompressedFotoAwal(dt.files);
+      },
+      'image/jpeg',
+      0.92
+    );
   }
 
   async function handleSubmitOrder(e) {
@@ -448,8 +572,7 @@ export function OrdersPage() {
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
                   <p className="text-sm font-medium text-batik-ink">Foto awal (referensi)</p>
                   <p className="mt-0.5 text-xs text-batik-indigo/60">
-                    Hingga {MAX_FOTO_AWAL_CREATE} gambar. Otomatis dikompres ke ~maks. 600 KB per file
-                    sebelum dikirim. Kelola lanjutan di halaman detail.
+                    Hingga {MAX_FOTO_AWAL_CREATE} gambar. Kelola lanjutan di halaman detail.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <label
@@ -474,29 +597,25 @@ export function OrdersPage() {
                         }}
                       />
                     </label>
-                    <label
-                      className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-batik-teal/40 ${
+                    <button
+                      type="button"
+                      className={`inline-flex items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-batik-teal/40 ${
                         compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE
                           ? 'pointer-events-none opacity-50'
                           : ''
                       }`}
+                      disabled={
+                        compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE
+                      }
+                      onClick={() => openDeviceCamera()}
                     >
                       <Camera className="h-4 w-4 text-batik-teal" aria-hidden />
                       Kamera
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        disabled={compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE}
-                        onChange={async (e) => {
-                          const list = e.target.files;
-                          await appendCompressedFotoAwal(list);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
+                    </button>
                   </div>
+                  <p className="mt-1 text-[11px] text-batik-indigo/50">
+                    Kamera membuka preview langsung lewat peramban (HTTPS / localhost). Galeri tetap lewat tombol Galeri.
+                  </p>
                   {compressingFoto && (
                     <p className="mt-2 text-xs font-medium text-batik-teal">Mengompres gambar…</p>
                   )}
@@ -669,6 +788,46 @@ export function OrdersPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {cameraOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-black/95 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ambil foto dari kamera"
+        >
+          <video
+            ref={cameraVideoRef}
+            className="max-h-[min(65vh,560px)] w-full max-w-lg rounded-xl bg-black object-cover"
+            playsInline
+            muted
+            autoPlay
+            onLoadedMetadata={markCameraVideoReady}
+            onLoadedData={markCameraVideoReady}
+            onCanPlay={markCameraVideoReady}
+          />
+          <p className="max-w-md text-center text-xs text-white/75">
+            Izinkan akses kamera saat diminta. Gunakan tombol Galeri jika ingin pilih file dari album.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={stopCameraStream}
+              className="rounded-xl border border-white/35 bg-white/10 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/20"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              disabled={!cameraVideoReady}
+              onClick={() => capturePhotoFromCamera()}
+              className="rounded-xl bg-batik-teal px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Ambil foto
+            </button>
+          </div>
         </div>
       )}
     </div>
