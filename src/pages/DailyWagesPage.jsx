@@ -301,7 +301,7 @@ export function DailyWagesPage() {
 
       <section className="rounded-2xl border border-batik-teal/15 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-batik-ink">Filter & daftar</h2>
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3 md:items-end">
           <WageDatePicker
             label="Dari"
             labelClassName="text-xs text-slate-500"
@@ -318,7 +318,7 @@ export function DailyWagesPage() {
             onChangeYmd={setTo}
             minDate={parseYmd(from) ?? undefined}
           />
-          <div className="min-w-[12rem] flex-1 sm:max-w-xs">
+          <div className="min-w-0">
             <label className="text-xs text-slate-500" htmlFor="daily-wage-filter-worker">
               Pekerja
             </label>
@@ -420,7 +420,7 @@ function WageDatePicker({
   maxDate,
 }) {
   return (
-    <div className="w-full min-w-[10rem] sm:min-w-[11rem]">
+    <div className="w-full min-w-0">
       <label htmlFor={inputId} className={`block ${labelClassName}`}>
         {label}
       </label>
