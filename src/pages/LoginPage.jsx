@@ -31,7 +31,7 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-batik-indigo via-batik-teal to-batik-ink p-4">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/95 p-8 shadow-xl backdrop-blur">
-        <h1 className="text-center text-2xl font-bold text-batik-ink">Manajemen Produksi Batik</h1>
+        <h1 className="text-center text-2xl font-bold text-batik-ink">Batik Binar Indramayu</h1>
         <p className="mt-1 text-center text-sm text-batik-indigo/70">Masuk dengan username & password</p>
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           {error && (

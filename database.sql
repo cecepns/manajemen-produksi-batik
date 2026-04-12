@@ -1,4 +1,4 @@
--- Manajemen Produksi Batik — skema MySQL
+-- Batik Binar Indramayu — skema MySQL
 -- Impor: mysql -u root -p < database.sql
 
 CREATE DATABASE IF NOT EXISTS manajemen_produksi_batik
