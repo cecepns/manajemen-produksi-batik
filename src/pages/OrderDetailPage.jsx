@@ -43,6 +43,7 @@ export function OrderDetailPage() {
         jumlah: data.jumlah,
         penanggung_jawab: data.penanggung_jawab,
         resep: data.resep ?? '',
+        keterangan: data.keterangan ?? '',
       });
       if (manager) {
         const w = await api.get('/users/workers');
@@ -294,6 +295,16 @@ export function OrderDetailPage() {
               onChange={(e) => setForm((f) => ({ ...f, resep: e.target.value }))}
             />
           </div>
+          <div className="mt-4">
+            <label className="text-sm font-medium text-batik-ink">Keterangan</label>
+            <textarea
+              className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
+              rows={2}
+              value={form.keterangan ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, keterangan: e.target.value }))}
+              placeholder="Catatan singkat pesanan (opsional)"
+            />
+          </div>
           <button
             type="submit"
             disabled={saving}
@@ -308,7 +319,7 @@ export function OrderDetailPage() {
         <section className="rounded-2xl border border-batik-teal/15 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-batik-ink">Foto awal pesanan / batik</h2>
           <p className="text-xs text-batik-indigo/50">
-            Unggahan pertama sebagai referensi pesanan (hingga 6 file).
+            Referensi pesanan (hingga 6 file). Bisa diunggah saat buat pesanan baru atau di sini.
           </p>
           {manager && (
             <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-batik-teal/40 hover:bg-white">
@@ -395,6 +406,13 @@ export function OrderDetailPage() {
           </div>
         </section>
       </div>
+
+      <section className="rounded-2xl border border-batik-teal/15 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-batik-ink">Keterangan pesanan</h2>
+        <p className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-batik-indigo/90">
+          {order.keterangan?.trim() ? order.keterangan : '—'}
+        </p>
+      </section>
 
       <section className="rounded-2xl border border-batik-teal/15 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-batik-ink">Resep produksi</h2>
@@ -536,6 +554,10 @@ export function OrderDetailPage() {
             <div>
               <dt className="text-xs text-slate-500">Jumlah</dt>
               <dd>{order.jumlah}</dd>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <dt className="text-xs text-slate-500">Keterangan</dt>
+              <dd className="text-batik-indigo/90">{order.keterangan?.trim() || '—'}</dd>
             </div>
           </dl>
 

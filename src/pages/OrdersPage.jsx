@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import { format, isValid, parse } from 'date-fns';
 import { id as localeId } from 'date-fns/locale/id';
 import { toast } from 'react-toastify';
-import { Plus, Save, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Save, ChevronRight, Pencil, Trash2, ImagePlus, X } from 'lucide-react';
 import { confirmWithToast } from '../utils/toastConfirm';
 import { api } from '../services/api';
 import { ROUTES } from '../constants/routes';
@@ -44,6 +44,8 @@ const STEP_PRESETS = [
 
 const defaultSteps = () => STEP_PRESETS.map((nama_step) => ({ ...emptyStep(), nama_step }));
 
+const MAX_FOTO_AWAL_CREATE = 6;
+
 const defaultForm = () => ({
   nama_usaha: 'Batik Binar',
   nama_pemesan: '',
@@ -52,6 +54,7 @@ const defaultForm = () => ({
   jumlah: 1,
   penanggung_jawab: '',
   resep: '',
+  keterangan: '',
 });
 
 export function OrdersPage() {
@@ -66,6 +69,19 @@ export function OrdersPage() {
   const [steps, setSteps] = useState(() => defaultSteps());
   const [saving, setSaving] = useState(false);
   const [editFetchId, setEditFetchId] = useState(null);
+  /** @type {[File[], function]} */
+  const [createFotoAwal, setCreateFotoAwal] = useState([]);
+
+  const createFotoPreviewUrls = useMemo(
+    () => createFotoAwal.map((f) => URL.createObjectURL(f)),
+    [createFotoAwal]
+  );
+
+  useEffect(() => {
+    return () => {
+      createFotoPreviewUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [createFotoPreviewUrls]);
 
   async function load() {
     setLoading(true);
@@ -92,6 +108,7 @@ export function OrdersPage() {
     setOrderModal(null);
     setForm(defaultForm());
     setSteps(defaultSteps());
+    setCreateFotoAwal([]);
   }
 
   function closeModal() {
@@ -102,6 +119,7 @@ export function OrdersPage() {
   function openCreateModal() {
     setForm(defaultForm());
     setSteps(defaultSteps());
+    setCreateFotoAwal([]);
     setOrderModal({ mode: 'create' });
   }
 
@@ -117,6 +135,7 @@ export function OrdersPage() {
         jumlah: data.jumlah ?? 1,
         penanggung_jawab: data.penanggung_jawab ?? '',
         resep: data.resep ?? '',
+        keterangan: data.keterangan ?? '',
       });
       setOrderModal({ mode: 'edit', id: orderId });
     } catch (e) {
@@ -184,7 +203,32 @@ export function OrdersPage() {
           setSaving(false);
           return;
         }
-        await api.post('/orders', { ...payload, workflow_steps });
+        if (createFotoAwal.length > MAX_FOTO_AWAL_CREATE) {
+          toast.error(`Maksimal ${MAX_FOTO_AWAL_CREATE} foto awal`);
+          setSaving(false);
+          return;
+        }
+        if (createFotoAwal.length > 0) {
+          const fd = new FormData();
+          fd.append('nama_usaha', String(payload.nama_usaha ?? ''));
+          fd.append('nama_pemesan', String(payload.nama_pemesan ?? ''));
+          fd.append('tanggal_pesanan', String(payload.tanggal_pesanan ?? ''));
+          fd.append('deadline', String(payload.deadline ?? ''));
+          fd.append('jumlah', String(payload.jumlah ?? 1));
+          fd.append('penanggung_jawab', String(payload.penanggung_jawab ?? ''));
+          fd.append('resep', payload.resep != null ? String(payload.resep) : '');
+          fd.append(
+            'keterangan',
+            payload.keterangan != null && String(payload.keterangan).trim()
+              ? String(payload.keterangan).trim()
+              : ''
+          );
+          fd.append('workflow_steps', JSON.stringify(workflow_steps));
+          for (const file of createFotoAwal) fd.append('images', file);
+          await api.postForm('/orders', fd);
+        } else {
+          await api.post('/orders', { ...payload, workflow_steps });
+        }
         toast.success('Pesanan berhasil dibuat');
       } else {
         await api.put(`/orders/${orderModal.id}`, payload);
@@ -235,6 +279,7 @@ export function OrdersPage() {
                   <th className="px-4 py-3">Deadline</th>
                   <th className="px-4 py-3">Jumlah</th>
                   <th className="px-4 py-3">PJ</th>
+                  <th className="px-4 py-3 max-w-[200px]">Keterangan</th>
                   <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
@@ -251,6 +296,15 @@ export function OrdersPage() {
                     <td className="px-4 py-3 text-batik-indigo/80">{formatDate(o.deadline)}</td>
                     <td className="px-4 py-3">{o.jumlah}</td>
                     <td className="px-4 py-3 text-batik-indigo/80">{o.penanggung_jawab}</td>
+                    <td className="max-w-[200px] px-4 py-3 text-batik-indigo/75">
+                      {o.keterangan?.trim() ? (
+                        <span className="line-clamp-2" title={o.keterangan}>
+                          {o.keterangan}
+                        </span>
+                      ) : (
+                        <span className="text-batik-indigo/40">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center justify-end gap-1">
                         <Link
@@ -366,6 +420,73 @@ export function OrdersPage() {
                   placeholder="Catatan produksi, warna, pola…"
                 />
               </div>
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-batik-ink">Keterangan</label>
+                <textarea
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none ring-batik-teal/30 focus:ring-2"
+                  rows={2}
+                  value={form.keterangan}
+                  onChange={(e) => setForm((f) => ({ ...f, keterangan: e.target.value }))}
+                  placeholder="Catatan singkat pesanan (opsional)"
+                />
+              </div>
+              {orderModal.mode === 'create' ? (
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+                  <p className="text-sm font-medium text-batik-ink">Foto awal (referensi)</p>
+                  <p className="mt-0.5 text-xs text-batik-indigo/60">
+                    Unggah hingga {MAX_FOTO_AWAL_CREATE} gambar. Bisa diubah atau dihapus nanti di halaman detail.
+                  </p>
+                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-batik-teal/40">
+                    <ImagePlus className="h-4 w-4 text-batik-teal" aria-hidden />
+                    Pilih foto
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const list = e.target.files;
+                        if (!list?.length) return;
+                        const add = Array.from(list);
+                        setCreateFotoAwal((prev) => {
+                          const next = [...prev, ...add].slice(0, MAX_FOTO_AWAL_CREATE);
+                          if (prev.length + add.length > MAX_FOTO_AWAL_CREATE) {
+                            toast.warn(`Maksimal ${MAX_FOTO_AWAL_CREATE} foto; kelebihan diabaikan`);
+                          }
+                          return next;
+                        });
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {createFotoAwal.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {createFotoAwal.map((file, idx) => (
+                        <div
+                          key={`${file.name}-${file.size}-${idx}`}
+                          className="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-white"
+                        >
+                          <img
+                            src={createFotoPreviewUrls[idx]}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            title="Hapus dari daftar unggahan"
+                            onClick={() =>
+                              setCreateFotoAwal((prev) => prev.filter((_, i) => i !== idx))
+                            }
+                            className="absolute right-0.5 top-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/95 text-red-600 shadow-sm opacity-0 ring-1 ring-slate-200 transition group-hover:opacity-100"
+                          >
+                            <X className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
               {orderModal.mode === 'create' ? (
                 <div className="mt-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">

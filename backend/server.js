@@ -50,6 +50,25 @@ const MAX_FOTO_AWAL = 6;
 const MAX_FOTO_AKHIR = 6;
 const CUACA_VALUES = new Set(['terang', 'mendung', 'hujan']);
 
+function unlinkUploadedFiles(files) {
+  for (const f of files || []) {
+    try {
+      const fp = path.join(UPLOAD_DIR, f.filename);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function ordersCreateMaybeMultipart(req, res, next) {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) {
+    return upload.array('images', MAX_FOTO_AWAL)(req, res, next);
+  }
+  next();
+}
+
 function authMiddleware(req, res, next) {
   const h = req.headers.authorization;
   const token = h?.startsWith('Bearer ') ? h.slice(7) : null;
@@ -382,77 +401,126 @@ app.get('/api/orders/:id', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/orders', authMiddleware, requireRole('owner', 'supervisor'), async (req, res) => {
-  const conn = await pool.getConnection();
-  try {
-    const {
-      nama_usaha,
-      nama_pemesan,
-      tanggal_pesanan,
-      deadline,
-      jumlah,
-      penanggung_jawab,
-      resep,
-      workflow_steps: stepsBody,
-    } = req.body || {};
+app.post(
+  '/api/orders',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  ordersCreateMaybeMultipart,
+  async (req, res) => {
+    const conn = await pool.getConnection();
+    const files = req.files || [];
+    try {
+      const isMultipart = (req.headers['content-type'] || '').includes('multipart/form-data');
+      const raw = isMultipart ? req.body || {} : req.body || {};
 
-    if (!nama_pemesan || !tanggal_pesanan || !deadline || !penanggung_jawab) {
-      return res.status(400).json({ message: 'Field wajib belum lengkap' });
-    }
+      let stepsBody;
+      if (isMultipart) {
+        const ws = raw.workflow_steps;
+        if (typeof ws === 'string') {
+          try {
+            stepsBody = JSON.parse(ws || '[]');
+          } catch {
+            unlinkUploadedFiles(files);
+            return res.status(400).json({ message: 'workflow_steps tidak valid' });
+          }
+        } else {
+          stepsBody = ws;
+        }
+      } else {
+        stepsBody = raw.workflow_steps;
+      }
 
-    const usaha =
-      typeof nama_usaha === 'string' && nama_usaha.trim()
-        ? nama_usaha.trim()
-        : 'Batik Binar';
-
-    await conn.beginTransaction();
-    const [r] = await conn.query(
-      `INSERT INTO orders (nama_usaha, nama_pemesan, tanggal_pesanan, deadline, jumlah, penanggung_jawab, resep)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        usaha,
+      const {
+        nama_usaha,
         nama_pemesan,
         tanggal_pesanan,
         deadline,
-        Number(jumlah) > 0 ? Number(jumlah) : 1,
+        jumlah,
         penanggung_jawab,
-        resep ?? null,
-      ]
-    );
-    const orderId = r.insertId;
+        resep,
+        keterangan,
+      } = raw;
 
-    const steps = Array.isArray(stepsBody) ? stepsBody : [];
-    for (const s of steps) {
-      const name = s?.nama_step?.trim();
-      if (!name) continue;
-      const wid = s?.assigned_worker_id ? Number(s.assigned_worker_id) : null;
-      const ket =
-        s?.keterangan != null && String(s.keterangan).trim()
-          ? String(s.keterangan).trim()
-          : null;
-      let harga = null;
-      if (s?.harga_pekerjaan != null && s.harga_pekerjaan !== '') {
-        const n = Number(s.harga_pekerjaan);
-        harga = Number.isFinite(n) ? n : null;
+      if (!nama_pemesan || !tanggal_pesanan || !deadline || !penanggung_jawab) {
+        unlinkUploadedFiles(files);
+        return res.status(400).json({ message: 'Field wajib belum lengkap' });
       }
-      await conn.query(
-        `INSERT INTO workflow_steps (order_id, nama_step, keterangan, harga_pekerjaan, assigned_worker_id, status)
-         VALUES (?, ?, ?, ?, ?, 'pending')`,
-        [orderId, name, ket, harga, wid || null]
-      );
-    }
 
-    await conn.commit();
-    const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
-    res.status(201).json(order);
-  } catch (e) {
-    await conn.rollback();
-    console.error(e);
-    res.status(500).json({ message: 'Server error' });
-  } finally {
-    conn.release();
+      const usaha =
+        typeof nama_usaha === 'string' && nama_usaha.trim()
+          ? nama_usaha.trim()
+          : 'Batik Binar';
+
+      const ketOrder =
+        keterangan != null && String(keterangan).trim()
+          ? String(keterangan).trim()
+          : null;
+
+      await conn.beginTransaction();
+      const [r] = await conn.query(
+        `INSERT INTO orders (nama_usaha, nama_pemesan, tanggal_pesanan, deadline, jumlah, penanggung_jawab, resep, keterangan)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          usaha,
+          nama_pemesan,
+          tanggal_pesanan,
+          deadline,
+          Number(jumlah) > 0 ? Number(jumlah) : 1,
+          penanggung_jawab,
+          resep ?? null,
+          ketOrder,
+        ]
+      );
+      const orderId = r.insertId;
+
+      const steps = Array.isArray(stepsBody) ? stepsBody : [];
+      for (const s of steps) {
+        const name = s?.nama_step?.trim();
+        if (!name) continue;
+        const wid = s?.assigned_worker_id ? Number(s.assigned_worker_id) : null;
+        const ket =
+          s?.keterangan != null && String(s.keterangan).trim()
+            ? String(s.keterangan).trim()
+            : null;
+        let harga = null;
+        if (s?.harga_pekerjaan != null && s.harga_pekerjaan !== '') {
+          const n = Number(s.harga_pekerjaan);
+          harga = Number.isFinite(n) ? n : null;
+        }
+        await conn.query(
+          `INSERT INTO workflow_steps (order_id, nama_step, keterangan, harga_pekerjaan, assigned_worker_id, status)
+           VALUES (?, ?, ?, ?, ?, 'pending')`,
+          [orderId, name, ket, harga, wid || null]
+        );
+      }
+
+      if (files.length > MAX_FOTO_AWAL) {
+        await conn.rollback();
+        unlinkUploadedFiles(files);
+        return res.status(400).json({ message: `Maksimal ${MAX_FOTO_AWAL} foto awal` });
+      }
+
+      for (const f of files) {
+        const url = `/uploads/${f.filename}`;
+        await conn.query(
+          'INSERT INTO order_images (order_id, jenis, image_url) VALUES (?, ?, ?)',
+          [orderId, 'foto_awal', url]
+        );
+      }
+
+      await conn.commit();
+      const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+      res.status(201).json(order);
+    } catch (e) {
+      await conn.rollback();
+      unlinkUploadedFiles(files);
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    } finally {
+      conn.release();
+    }
   }
-});
+);
 
 app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), async (req, res) => {
   try {
@@ -467,6 +535,7 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
       jumlah,
       penanggung_jawab,
       resep,
+      keterangan,
     } = req.body || {};
 
     const [[cur]] = await pool.query('SELECT * FROM orders WHERE id = ?', [id]);
@@ -477,10 +546,17 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
         ? String(nama_usaha || '').trim() || 'Batik Binar'
         : cur.nama_usaha ?? 'Batik Binar';
 
+    const nextKeterangan =
+      keterangan !== undefined
+        ? keterangan != null && String(keterangan).trim()
+          ? String(keterangan).trim()
+          : null
+        : cur.keterangan ?? null;
+
     await pool.query(
       `UPDATE orders SET
         nama_usaha = ?,
-        nama_pemesan = ?, tanggal_pesanan = ?, deadline = ?, jumlah = ?, penanggung_jawab = ?, resep = ?
+        nama_pemesan = ?, tanggal_pesanan = ?, deadline = ?, jumlah = ?, penanggung_jawab = ?, resep = ?, keterangan = ?
        WHERE id = ?`,
       [
         nextUsaha,
@@ -490,6 +566,7 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
         jumlah !== undefined ? Number(jumlah) || 1 : cur.jumlah,
         penanggung_jawab !== undefined ? penanggung_jawab : cur.penanggung_jawab,
         resep !== undefined ? resep : cur.resep,
+        nextKeterangan,
         id,
       ]
     );
