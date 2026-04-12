@@ -4,8 +4,9 @@ import DatePicker, { registerLocale } from 'react-datepicker';
 import { format, isValid, parse } from 'date-fns';
 import { id as localeId } from 'date-fns/locale/id';
 import { toast } from 'react-toastify';
-import { Plus, Save, ChevronRight, Pencil, Trash2, ImagePlus, X } from 'lucide-react';
+import { Plus, Save, ChevronRight, Pencil, Trash2, X, Camera, Images } from 'lucide-react';
 import { confirmWithToast } from '../utils/toastConfirm';
+import { compressOrderPhoto } from '../utils/compressOrderPhoto';
 import { api } from '../services/api';
 import { ROUTES } from '../constants/routes';
 import { formatDate } from '../utils/formatDate';
@@ -71,6 +72,7 @@ export function OrdersPage() {
   const [editFetchId, setEditFetchId] = useState(null);
   /** @type {[File[], function]} */
   const [createFotoAwal, setCreateFotoAwal] = useState([]);
+  const [compressingFoto, setCompressingFoto] = useState(false);
 
   const createFotoPreviewUrls = useMemo(
     () => createFotoAwal.map((f) => URL.createObjectURL(f)),
@@ -109,10 +111,11 @@ export function OrdersPage() {
     setForm(defaultForm());
     setSteps(defaultSteps());
     setCreateFotoAwal([]);
+    setCompressingFoto(false);
   }
 
   function closeModal() {
-    if (saving) return;
+    if (saving || compressingFoto) return;
     resetOrderModal();
   }
 
@@ -175,9 +178,40 @@ export function OrdersPage() {
     });
   }
 
+  async function appendCompressedFotoAwal(fileList) {
+    if (!fileList?.length || compressingFoto) return;
+    const slots = MAX_FOTO_AWAL_CREATE - createFotoAwal.length;
+    if (slots <= 0) {
+      toast.warn(`Maksimal ${MAX_FOTO_AWAL_CREATE} foto`);
+      return;
+    }
+    const picked = Array.from(fileList);
+    const toProcess = picked.slice(0, slots);
+    if (picked.length > slots) {
+      toast.warn(`Hanya ${slots} slot tersisa; foto berlebih diabaikan`);
+    }
+    setCompressingFoto(true);
+    const done = [];
+    try {
+      for (const f of toProcess) {
+        try {
+          done.push(await compressOrderPhoto(f));
+        } catch (err) {
+          toast.error(err?.message || 'Gagal memproses gambar');
+        }
+      }
+      if (done.length) {
+        setCreateFotoAwal((prev) => [...prev, ...done]);
+      }
+    } finally {
+      setCompressingFoto(false);
+    }
+  }
+
   async function handleSubmitOrder(e) {
     e.preventDefault();
     if (!orderModal) return;
+    if (compressingFoto) return;
     if (!form.tanggal_pesanan?.trim() || !form.deadline?.trim()) {
       toast.error('Tanggal pesanan dan deadline wajib diisi');
       return;
@@ -363,7 +397,7 @@ export function OrdersPage() {
               </h2>
               <button
                 type="button"
-                disabled={saving}
+                disabled={saving || compressingFoto}
                 onClick={closeModal}
                 className="rounded-lg px-2 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
               >
@@ -410,6 +444,91 @@ export function OrdersPage() {
                   onChange={(v) => setForm((f) => ({ ...f, jumlah: v }))}
                 />
               </div>
+              {orderModal.mode === 'create' ? (
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+                  <p className="text-sm font-medium text-batik-ink">Foto awal (referensi)</p>
+                  <p className="mt-0.5 text-xs text-batik-indigo/60">
+                    Hingga {MAX_FOTO_AWAL_CREATE} gambar. Otomatis dikompres ke ~maks. 600 KB per file
+                    sebelum dikirim. Kelola lanjutan di halaman detail.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <label
+                      className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-batik-teal/40 ${
+                        compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE
+                          ? 'pointer-events-none opacity-50'
+                          : ''
+                      }`}
+                    >
+                      <Images className="h-4 w-4 text-batik-teal" aria-hidden />
+                      Galeri
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        disabled={compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE}
+                        onChange={async (e) => {
+                          const list = e.target.files;
+                          await appendCompressedFotoAwal(list);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    <label
+                      className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-batik-teal/40 ${
+                        compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE
+                          ? 'pointer-events-none opacity-50'
+                          : ''
+                      }`}
+                    >
+                      <Camera className="h-4 w-4 text-batik-teal" aria-hidden />
+                      Kamera
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        disabled={compressingFoto || createFotoAwal.length >= MAX_FOTO_AWAL_CREATE}
+                        onChange={async (e) => {
+                          const list = e.target.files;
+                          await appendCompressedFotoAwal(list);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {compressingFoto && (
+                    <p className="mt-2 text-xs font-medium text-batik-teal">Mengompres gambar…</p>
+                  )}
+                  {createFotoAwal.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {createFotoAwal.map((file, idx) => (
+                        <div
+                          key={`${file.name}-${file.size}-${idx}`}
+                          className="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-white"
+                        >
+                          <img
+                            src={createFotoPreviewUrls[idx]}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            title="Hapus dari daftar unggahan"
+                            disabled={compressingFoto}
+                            onClick={() =>
+                              setCreateFotoAwal((prev) => prev.filter((_, i) => i !== idx))
+                            }
+                            className="absolute right-0.5 top-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/95 text-red-600 shadow-sm opacity-0 ring-1 ring-slate-200 transition group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-40"
+                          >
+                            <X className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-batik-ink">Resep / instruksi</label>
                 <textarea
@@ -430,63 +549,6 @@ export function OrdersPage() {
                   placeholder="Catatan singkat pesanan (opsional)"
                 />
               </div>
-              {orderModal.mode === 'create' ? (
-                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
-                  <p className="text-sm font-medium text-batik-ink">Foto awal (referensi)</p>
-                  <p className="mt-0.5 text-xs text-batik-indigo/60">
-                    Unggah hingga {MAX_FOTO_AWAL_CREATE} gambar. Bisa diubah atau dihapus nanti di halaman detail.
-                  </p>
-                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-batik-teal/40">
-                    <ImagePlus className="h-4 w-4 text-batik-teal" aria-hidden />
-                    Pilih foto
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        const list = e.target.files;
-                        if (!list?.length) return;
-                        const add = Array.from(list);
-                        setCreateFotoAwal((prev) => {
-                          const next = [...prev, ...add].slice(0, MAX_FOTO_AWAL_CREATE);
-                          if (prev.length + add.length > MAX_FOTO_AWAL_CREATE) {
-                            toast.warn(`Maksimal ${MAX_FOTO_AWAL_CREATE} foto; kelebihan diabaikan`);
-                          }
-                          return next;
-                        });
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                  {createFotoAwal.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {createFotoAwal.map((file, idx) => (
-                        <div
-                          key={`${file.name}-${file.size}-${idx}`}
-                          className="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-white"
-                        >
-                          <img
-                            src={createFotoPreviewUrls[idx]}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                          <button
-                            type="button"
-                            title="Hapus dari daftar unggahan"
-                            onClick={() =>
-                              setCreateFotoAwal((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                            className="absolute right-0.5 top-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/95 text-red-600 shadow-sm opacity-0 ring-1 ring-slate-200 transition group-hover:opacity-100"
-                          >
-                            <X className="h-3.5 w-3.5" aria-hidden />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : null}
               {orderModal.mode === 'create' ? (
                 <div className="mt-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -587,7 +649,7 @@ export function OrdersPage() {
             <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 px-6 py-4">
               <button
                 type="button"
-                disabled={saving}
+                disabled={saving || compressingFoto}
                 onClick={closeModal}
                 className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
@@ -595,7 +657,7 @@ export function OrdersPage() {
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || compressingFoto}
                 className="inline-flex items-center gap-2 rounded-xl bg-batik-indigo px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-batik-teal disabled:opacity-60"
               >
                 <Save className="h-4 w-4" aria-hidden />
