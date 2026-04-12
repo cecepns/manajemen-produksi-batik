@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS orders (
   deadline DATE NOT NULL,
   jumlah INT UNSIGNED NOT NULL DEFAULT 1,
   penanggung_jawab VARCHAR(255) NOT NULL,
+  jenis_bahan VARCHAR(255) NULL,
+  ukuran_meter DECIMAL(10, 2) NULL,
   resep TEXT,
   keterangan TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

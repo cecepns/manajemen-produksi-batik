@@ -42,6 +42,11 @@ export function OrderDetailPage() {
         deadline: data.deadline?.slice?.(0, 10) ?? data.deadline,
         jumlah: data.jumlah,
         penanggung_jawab: data.penanggung_jawab,
+        jenis_bahan: data.jenis_bahan ?? '',
+        ukuran_meter:
+          data.ukuran_meter != null && data.ukuran_meter !== ''
+            ? String(data.ukuran_meter)
+            : '',
         resep: data.resep ?? '',
         keterangan: data.keterangan ?? '',
       });
@@ -66,9 +71,14 @@ export function OrderDetailPage() {
     e.preventDefault();
     setSaving(true);
     try {
+      const ukm = Number(form.ukuran_meter);
       const updated = await api.put(`/orders/${id}`, {
         ...form,
         jumlah: Number(form.jumlah) || 1,
+        ukuran_meter:
+          form.ukuran_meter === '' || form.ukuran_meter == null || !Number.isFinite(ukm)
+            ? null
+            : ukm,
       });
       setOrder((o) => ({ ...o, ...updated }));
       setEditOpen(false);
@@ -283,6 +293,27 @@ export function OrderDetailPage() {
                 className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
                 value={form.jumlah}
                 onChange={(e) => setForm((f) => ({ ...f, jumlah: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-batik-ink">Jenis bahan</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
+                value={form.jenis_bahan ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, jenis_bahan: e.target.value }))}
+                placeholder="Contoh: primissima, mori…"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-batik-ink">Ukuran (meter)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
+                value={form.ukuran_meter ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, ukuran_meter: e.target.value }))}
+                placeholder="Opsional"
               />
             </div>
           </div>
@@ -554,6 +585,26 @@ export function OrderDetailPage() {
             <div>
               <dt className="text-xs text-slate-500">Jumlah</dt>
               <dd>{order.jumlah}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Jenis bahan</dt>
+              <dd className="font-medium text-batik-ink">
+                {order.jenis_bahan?.trim() ? order.jenis_bahan : '—'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Ukuran (meter)</dt>
+              <dd className="font-medium text-batik-ink">
+                {order.ukuran_meter != null && order.ukuran_meter !== ''
+                  ? `${Number(order.ukuran_meter)} m`
+                  : '—'}
+              </dd>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <dt className="text-xs text-slate-500">Resep / instruksi</dt>
+              <dd className="whitespace-pre-wrap text-batik-indigo/90">
+                {order.resep?.trim() ? order.resep : '—'}
+              </dd>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <dt className="text-xs text-slate-500">Keterangan</dt>

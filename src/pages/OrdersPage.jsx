@@ -54,6 +54,8 @@ const defaultForm = () => ({
   deadline: '',
   jumlah: 1,
   penanggung_jawab: '',
+  jenis_bahan: '',
+  ukuran_meter: '',
   resep: '',
   keterangan: '',
 });
@@ -224,6 +226,11 @@ export function OrdersPage() {
         deadline: data.deadline?.slice?.(0, 10) ?? data.deadline ?? '',
         jumlah: data.jumlah ?? 1,
         penanggung_jawab: data.penanggung_jawab ?? '',
+        jenis_bahan: data.jenis_bahan ?? '',
+        ukuran_meter:
+          data.ukuran_meter != null && data.ukuran_meter !== ''
+            ? String(data.ukuran_meter)
+            : '',
         resep: data.resep ?? '',
         keterangan: data.keterangan ?? '',
       });
@@ -342,7 +349,15 @@ export function OrdersPage() {
     }
     setSaving(true);
     try {
-      const payload = { ...form, jumlah: Number(form.jumlah) || 1 };
+      const ukm = Number(form.ukuran_meter);
+      const payload = {
+        ...form,
+        jumlah: Number(form.jumlah) || 1,
+        ukuran_meter:
+          form.ukuran_meter === '' || form.ukuran_meter == null || !Number.isFinite(ukm)
+            ? null
+            : ukm,
+      };
       if (orderModal.mode === 'create') {
         const workflow_steps = steps
           .filter((s) => s.nama_step.trim())
@@ -374,6 +389,13 @@ export function OrdersPage() {
           fd.append('deadline', String(payload.deadline ?? ''));
           fd.append('jumlah', String(payload.jumlah ?? 1));
           fd.append('penanggung_jawab', String(payload.penanggung_jawab ?? ''));
+          fd.append('jenis_bahan', payload.jenis_bahan != null ? String(payload.jenis_bahan) : '');
+          fd.append(
+            'ukuran_meter',
+            payload.ukuran_meter != null && Number.isFinite(payload.ukuran_meter)
+              ? String(payload.ukuran_meter)
+              : ''
+          );
           fd.append('resep', payload.resep != null ? String(payload.resep) : '');
           fd.append(
             'keterangan',
@@ -566,6 +588,21 @@ export function OrdersPage() {
                   min={1}
                   value={form.jumlah}
                   onChange={(v) => setForm((f) => ({ ...f, jumlah: v }))}
+                />
+                <Field
+                  label="Jenis bahan"
+                  value={form.jenis_bahan}
+                  onChange={(v) => setForm((f) => ({ ...f, jenis_bahan: v }))}
+                  placeholder="Contoh: primissima, mori, sutera…"
+                />
+                <Field
+                  label="Ukuran (meter)"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.ukuran_meter}
+                  onChange={(v) => setForm((f) => ({ ...f, ukuran_meter: v }))}
+                  placeholder="Opsional"
                 />
               </div>
               {orderModal.mode === 'create' ? (

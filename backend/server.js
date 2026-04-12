@@ -437,6 +437,8 @@ app.post(
         deadline,
         jumlah,
         penanggung_jawab,
+        jenis_bahan,
+        ukuran_meter,
         resep,
         keterangan,
       } = raw;
@@ -456,10 +458,20 @@ app.post(
           ? String(keterangan).trim()
           : null;
 
+      const bahan =
+        jenis_bahan != null && String(jenis_bahan).trim()
+          ? String(jenis_bahan).trim()
+          : null;
+      let ukuran = null;
+      if (ukuran_meter !== undefined && ukuran_meter !== '' && ukuran_meter != null) {
+        const n = Number(ukuran_meter);
+        ukuran = Number.isFinite(n) ? n : null;
+      }
+
       await conn.beginTransaction();
       const [r] = await conn.query(
-        `INSERT INTO orders (nama_usaha, nama_pemesan, tanggal_pesanan, deadline, jumlah, penanggung_jawab, resep, keterangan)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO orders (nama_usaha, nama_pemesan, tanggal_pesanan, deadline, jumlah, penanggung_jawab, jenis_bahan, ukuran_meter, resep, keterangan)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           usaha,
           nama_pemesan,
@@ -467,6 +479,8 @@ app.post(
           deadline,
           Number(jumlah) > 0 ? Number(jumlah) : 1,
           penanggung_jawab,
+          bahan,
+          ukuran,
           resep ?? null,
           ketOrder,
         ]
@@ -534,6 +548,8 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
       deadline,
       jumlah,
       penanggung_jawab,
+      jenis_bahan,
+      ukuran_meter,
       resep,
       keterangan,
     } = req.body || {};
@@ -553,10 +569,28 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
           : null
         : cur.keterangan ?? null;
 
+    const nextJenisBahan =
+      jenis_bahan !== undefined
+        ? jenis_bahan != null && String(jenis_bahan).trim()
+          ? String(jenis_bahan).trim()
+          : null
+        : cur.jenis_bahan ?? null;
+
+    let nextUkuranMeter = cur.ukuran_meter ?? null;
+    if (ukuran_meter !== undefined) {
+      if (ukuran_meter === '' || ukuran_meter == null) {
+        nextUkuranMeter = null;
+      } else {
+        const n = Number(ukuran_meter);
+        nextUkuranMeter = Number.isFinite(n) ? n : null;
+      }
+    }
+
     await pool.query(
       `UPDATE orders SET
         nama_usaha = ?,
-        nama_pemesan = ?, tanggal_pesanan = ?, deadline = ?, jumlah = ?, penanggung_jawab = ?, resep = ?, keterangan = ?
+        nama_pemesan = ?, tanggal_pesanan = ?, deadline = ?, jumlah = ?, penanggung_jawab = ?,
+        jenis_bahan = ?, ukuran_meter = ?, resep = ?, keterangan = ?
        WHERE id = ?`,
       [
         nextUsaha,
@@ -565,6 +599,8 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
         deadline !== undefined ? deadline : cur.deadline,
         jumlah !== undefined ? Number(jumlah) || 1 : cur.jumlah,
         penanggung_jawab !== undefined ? penanggung_jawab : cur.penanggung_jawab,
+        nextJenisBahan,
+        nextUkuranMeter,
         resep !== undefined ? resep : cur.resep,
         nextKeterangan,
         id,
