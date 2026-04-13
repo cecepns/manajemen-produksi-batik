@@ -471,6 +471,15 @@ export function OrdersPage() {
                         {o.nama_usaha || 'Batik Binar'}
                       </p>
                       <p className="font-medium text-batik-ink">{o.nama_pemesan}</p>
+                      <p className="mt-1 text-xs leading-snug text-batik-indigo/70">
+                        <span className="font-medium text-batik-indigo/80">Jenis kain:</span>{' '}
+                        {o.jenis_bahan?.trim() ? o.jenis_bahan : '—'}
+                        <span className="mx-1.5 text-batik-indigo/40">·</span>
+                        <span className="font-medium text-batik-indigo/80">Ukuran:</span>{' '}
+                        {o.ukuran_meter != null && o.ukuran_meter !== ''
+                          ? `${Number(o.ukuran_meter)} m`
+                          : '—'}
+                      </p>
                     </td>
                     <td className="px-4 py-3 text-batik-indigo/80">{formatDate(o.tanggal_pesanan)}</td>
                     <td className="px-4 py-3 text-batik-indigo/80">{formatDate(o.deadline)}</td>
@@ -590,7 +599,7 @@ export function OrdersPage() {
                   onChange={(v) => setForm((f) => ({ ...f, jumlah: v }))}
                 />
                 <Field
-                  label="Jenis bahan"
+                  label="Jenis kain"
                   value={form.jenis_bahan}
                   onChange={(v) => setForm((f) => ({ ...f, jenis_bahan: v }))}
                   placeholder="Contoh: primissima, mori, sutera…"

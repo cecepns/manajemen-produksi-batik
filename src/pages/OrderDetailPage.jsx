@@ -205,6 +205,18 @@ export function OrderDetailPage() {
           <p className="text-sm text-batik-indigo/70">
             Deadline {formatDate(order.deadline)} · Jumlah {order.jumlah} · PJ: {order.penanggung_jawab}
           </p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-batik-indigo/85">
+            <span>
+              <span className="font-medium text-batik-ink/80">Jenis kain:</span>{' '}
+              {order.jenis_bahan?.trim() ? order.jenis_bahan : '—'}
+            </span>
+            <span>
+              <span className="font-medium text-batik-ink/80">Ukuran:</span>{' '}
+              {order.ukuran_meter != null && order.ukuran_meter !== ''
+                ? `${Number(order.ukuran_meter)} m`
+                : '—'}
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {manager && (
@@ -296,7 +308,7 @@ export function OrderDetailPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-batik-ink">Jenis bahan</label>
+              <label className="text-sm font-medium text-batik-ink">Jenis kain</label>
               <input
                 className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
                 value={form.jenis_bahan ?? ''}
@@ -587,7 +599,7 @@ export function OrderDetailPage() {
               <dd>{order.jumlah}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Jenis bahan</dt>
+              <dt className="text-xs text-slate-500">Jenis kain</dt>
               <dd className="font-medium text-batik-ink">
                 {order.jenis_bahan?.trim() ? order.jenis_bahan : '—'}
               </dd>
