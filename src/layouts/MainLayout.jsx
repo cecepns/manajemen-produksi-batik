@@ -40,7 +40,7 @@ export function MainLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="min-h-screen bg-slate-50">
       {mobileMenuOpen && (
         <button
           type="button"
@@ -50,7 +50,7 @@ export function MainLayout() {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 bg-batik-indigo shadow-xl transition-transform duration-200 md:static md:w-60 md:translate-x-0 md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-40 w-72 bg-batik-indigo shadow-xl transition-transform duration-200 md:w-60 md:translate-x-0 md:shadow-none ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -130,22 +130,24 @@ export function MainLayout() {
           </div>
         </div>
       </aside>
-      <div className="flex min-h-0 min-h-screen flex-1 flex-col bg-slate-50">
-        <header className="flex items-center justify-between border-b border-slate-200/80 bg-white px-4 py-3 md:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700"
-            aria-label="Buka menu"
-          >
-            <Menu className="h-5 w-5" aria-hidden />
-          </button>
-          <span className="text-sm font-semibold text-slate-900">{user?.username}</span>
-          <span className="w-10" aria-hidden />
-        </header>
-        <main className="flex-1 p-4 md:p-8">
-          <Outlet context={{ user, manager, owner }} />
-        </main>
+      <div className="min-h-screen w-full md:pl-60">
+        <div className="flex min-h-screen flex-col bg-slate-50">
+          <header className="flex items-center justify-between border-b border-slate-200/80 bg-white px-4 py-3 md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700"
+              aria-label="Buka menu"
+            >
+              <Menu className="h-5 w-5" aria-hidden />
+            </button>
+            <span className="text-sm font-semibold text-slate-900">{user?.username}</span>
+            <span className="w-10" aria-hidden />
+          </header>
+          <main className="flex-1 p-4 md:p-8">
+            <Outlet context={{ user, manager, owner }} />
+          </main>
+        </div>
       </div>
     </div>
   );
