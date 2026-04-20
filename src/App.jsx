@@ -13,7 +13,7 @@ export default function App() {
         pauseOnFocusLoss={false}
         theme="light"
         toastClassName="rounded-xl shadow-lg border border-slate-200/80"
-        bodyClassName="text-sm text-slate-800"
+        bodyClassName="text-base text-slate-800"
       />
     </>
   );

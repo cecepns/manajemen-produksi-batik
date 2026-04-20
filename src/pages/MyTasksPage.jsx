@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../services/api';
@@ -11,6 +11,7 @@ const PAGE_SIZE = 10;
 const SEARCH_DEBOUNCE_MS = 1000;
 
 export function MyTasksPage() {
+  const { user, manager } = useOutletContext();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
@@ -82,9 +83,9 @@ export function MyTasksPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-batik-ink">Tugas saya</h1>
+        <h1 className="text-2xl font-bold text-batik-ink">Tugas produksi</h1>
         <p className="text-sm text-batik-indigo/70">
-          Tahapan produksi yang ditugaskan kepada Anda.
+          Semua tahap produksi terlihat untuk referensi tim. Ubah status hanya untuk tugas Anda.
         </p>
       </div>
 
@@ -95,7 +96,7 @@ export function MyTasksPage() {
         />
         <input
           type="search"
-          placeholder="Cari pemesan, tahap, atau nomor pesanan… (debounce 1 detik)"
+          placeholder="Cari nama pesanan, pemesan, tahap, atau nomor pesanan… (debounce 1 detik)"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none ring-batik-teal/30 placeholder:text-slate-400 focus:ring-2"
@@ -110,27 +111,33 @@ export function MyTasksPage() {
           <p className="p-8 text-center text-sm text-batik-indigo/60">
             {debouncedSearch
               ? `Tidak ada tugas cocok dengan “${debouncedSearch}”.`
-              : 'Belum ada tugas yang ditugaskan.'}
+              : 'Belum ada tugas produksi.'}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100 p-2 sm:p-4">
-            {tasks.map((t) => (
-              <li
-                key={t.id}
-                className="rounded-xl border border-transparent p-3 transition hover:border-slate-100 hover:bg-slate-50/80"
-              >
+            {tasks.map((t) => {
+              const canEdit = manager || t.assigned_worker_id === user?.id;
+              return (
+                <li
+                  key={t.id}
+                  className="rounded-xl border border-transparent p-3 transition hover:border-slate-100 hover:bg-slate-50/80"
+                >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <Link
                       to={ROUTES.orderDetail(t.order_id)}
                       className="text-lg font-semibold text-batik-teal hover:underline"
                     >
-                      {t.nama_pemesan}
+                      {t.nama_usaha || `Pesanan #${t.order_id}`}
                     </Link>
                     <p className="text-sm text-batik-indigo/70">
-                      Pesanan #{t.order_id} · Deadline {formatDate(t.deadline)} · Qty {t.jumlah}
+                      Pemesan: {t.nama_pemesan} · Pesanan #{t.order_id} · Deadline{' '}
+                      {formatDate(t.deadline)} · Qty {t.jumlah}
                     </p>
                     <p className="mt-2 font-medium text-batik-ink">{t.nama_step}</p>
+                    <p className="text-xs text-batik-indigo/60">
+                      Ditugaskan ke: {t.assigned_username || 'Belum ditentukan'}
+                    </p>
                     <p className="text-xs text-batik-indigo/50">
                       Mulai {formatDateTime(t.tanggal_mulai)} · Selesai{' '}
                       {formatDateTime(t.tanggal_selesai)}
@@ -141,6 +148,7 @@ export function MyTasksPage() {
                     <select
                       className="rounded-lg border border-batik-teal/20 px-2 py-1.5 text-sm"
                       value={t.status}
+                      disabled={!canEdit}
                       onChange={(e) => setStatus(t.id, e.target.value)}
                     >
                       <option value="pending">Menunggu</option>
@@ -155,6 +163,7 @@ export function MyTasksPage() {
                         id={`cuaca-${t.id}`}
                         className="w-full rounded-lg border border-batik-teal/20 px-2 py-1.5 text-sm capitalize"
                         value={t.cuaca ?? ''}
+                        disabled={!canEdit}
                         onChange={(e) => setCuaca(t.id, e.target.value)}
                       >
                         <option value="">Cuaca…</option>
@@ -165,8 +174,9 @@ export function MyTasksPage() {
                     </div>
                   </div>
                 </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
 

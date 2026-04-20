@@ -99,9 +99,9 @@ async function canAccessOrder(user, orderId) {
   if (isManager(user.role)) return true;
   const [rows] = await pool.query(
     `SELECT 1 FROM workflow_steps
-     WHERE order_id = ? AND assigned_worker_id = ? AND status <> 'done'
+     WHERE order_id = ?
      LIMIT 1`,
-    [orderId, user.sub]
+    [orderId]
   );
   return rows.length > 0;
 }
@@ -349,20 +349,50 @@ app.delete('/api/admin/users/:id', authMiddleware, requireRole('owner'), async (
 // --- Orders ---
 app.get('/api/orders', authMiddleware, async (req, res) => {
   try {
-    const { role, sub } = req.user;
+    const { role } = req.user;
+    const includeCompleted = String(req.query.include_completed || '') === '1';
     let rows;
     if (isManager(role)) {
       [rows] = await pool.query(
-        `SELECT o.* FROM orders o ORDER BY o.tanggal_pesanan DESC, o.id DESC`
+        `SELECT o.*,
+                COALESCE(w.total_steps, 0) AS total_steps,
+                COALESCE(w.done_steps, 0) AS done_steps
+           FROM orders o
+           LEFT JOIN (
+             SELECT order_id,
+                    COUNT(*) AS total_steps,
+                    SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_steps
+               FROM workflow_steps
+              GROUP BY order_id
+           ) w ON w.order_id = o.id
+          WHERE (
+            ? = 1 OR
+            COALESCE(w.total_steps, 0) = 0 OR
+            COALESCE(w.done_steps, 0) < COALESCE(w.total_steps, 0)
+          )
+          ORDER BY o.tanggal_pesanan DESC, o.id DESC`,
+        [includeCompleted ? 1 : 0]
       );
     } else {
       [rows] = await pool.query(
-        `SELECT DISTINCT o.* FROM orders o
-         INNER JOIN workflow_steps ws ON ws.order_id = o.id
-           AND ws.assigned_worker_id = ?
-           AND ws.status <> 'done'
-         ORDER BY o.tanggal_pesanan DESC, o.id DESC`,
-        [sub]
+        `SELECT o.*,
+                COALESCE(w.total_steps, 0) AS total_steps,
+                COALESCE(w.done_steps, 0) AS done_steps
+           FROM orders o
+           LEFT JOIN (
+             SELECT order_id,
+                    COUNT(*) AS total_steps,
+                    SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_steps
+               FROM workflow_steps
+              GROUP BY order_id
+           ) w ON w.order_id = o.id
+          WHERE COALESCE(w.total_steps, 0) > 0
+            AND (
+              ? = 1 OR
+              COALESCE(w.done_steps, 0) < COALESCE(w.total_steps, 0)
+            )
+          ORDER BY o.tanggal_pesanan DESC, o.id DESC`,
+        [includeCompleted ? 1 : 0]
       );
     }
     res.json(rows);
@@ -433,12 +463,14 @@ app.post(
       const {
         nama_usaha,
         nama_pemesan,
+        nomor_telepon_pelanggan,
         tanggal_pesanan,
         deadline,
         jumlah,
         penanggung_jawab,
         jenis_bahan,
         ukuran_meter,
+        ukuran_jahit,
         resep,
         keterangan,
       } = raw;
@@ -457,6 +489,10 @@ app.post(
         keterangan != null && String(keterangan).trim()
           ? String(keterangan).trim()
           : null;
+      const nomorTelepon =
+        nomor_telepon_pelanggan != null && String(nomor_telepon_pelanggan).trim()
+          ? String(nomor_telepon_pelanggan).trim()
+          : null;
 
       const bahan =
         jenis_bahan != null && String(jenis_bahan).trim()
@@ -467,20 +503,27 @@ app.post(
         const n = Number(ukuran_meter);
         ukuran = Number.isFinite(n) ? n : null;
       }
+      const ukuranJahit =
+        ukuran_jahit != null && String(ukuran_jahit).trim() ? String(ukuran_jahit).trim() : null;
 
       await conn.beginTransaction();
       const [r] = await conn.query(
-        `INSERT INTO orders (nama_usaha, nama_pemesan, tanggal_pesanan, deadline, jumlah, penanggung_jawab, jenis_bahan, ukuran_meter, resep, keterangan)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO orders (
+          nama_usaha, nama_pemesan, nomor_telepon_pelanggan, tanggal_pesanan, deadline,
+          jumlah, penanggung_jawab, jenis_bahan, ukuran_meter, ukuran_jahit, resep, keterangan
+        )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           usaha,
           nama_pemesan,
+          nomorTelepon,
           tanggal_pesanan,
           deadline,
           Number(jumlah) > 0 ? Number(jumlah) : 1,
           penanggung_jawab,
           bahan,
           ukuran,
+          ukuranJahit,
           resep ?? null,
           ketOrder,
         ]
@@ -544,12 +587,14 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
     const {
       nama_usaha,
       nama_pemesan,
+      nomor_telepon_pelanggan,
       tanggal_pesanan,
       deadline,
       jumlah,
       penanggung_jawab,
       jenis_bahan,
       ukuran_meter,
+      ukuran_jahit,
       resep,
       keterangan,
     } = req.body || {};
@@ -568,6 +613,12 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
           ? String(keterangan).trim()
           : null
         : cur.keterangan ?? null;
+    const nextNomorTelepon =
+      nomor_telepon_pelanggan !== undefined
+        ? nomor_telepon_pelanggan != null && String(nomor_telepon_pelanggan).trim()
+          ? String(nomor_telepon_pelanggan).trim()
+          : null
+        : cur.nomor_telepon_pelanggan ?? null;
 
     const nextJenisBahan =
       jenis_bahan !== undefined
@@ -585,22 +636,31 @@ app.put('/api/orders/:id', authMiddleware, requireRole('owner', 'supervisor'), a
         nextUkuranMeter = Number.isFinite(n) ? n : null;
       }
     }
+    const nextUkuranJahit =
+      ukuran_jahit !== undefined
+        ? ukuran_jahit != null && String(ukuran_jahit).trim()
+          ? String(ukuran_jahit).trim()
+          : null
+        : cur.ukuran_jahit ?? null;
 
     await pool.query(
       `UPDATE orders SET
         nama_usaha = ?,
-        nama_pemesan = ?, tanggal_pesanan = ?, deadline = ?, jumlah = ?, penanggung_jawab = ?,
-        jenis_bahan = ?, ukuran_meter = ?, resep = ?, keterangan = ?
+        nama_pemesan = ?, nomor_telepon_pelanggan = ?, tanggal_pesanan = ?, deadline = ?,
+        jumlah = ?, penanggung_jawab = ?, jenis_bahan = ?, ukuran_meter = ?, ukuran_jahit = ?,
+        resep = ?, keterangan = ?
        WHERE id = ?`,
       [
         nextUsaha,
         nama_pemesan !== undefined ? nama_pemesan : cur.nama_pemesan,
+        nextNomorTelepon,
         tanggal_pesanan !== undefined ? tanggal_pesanan : cur.tanggal_pesanan,
         deadline !== undefined ? deadline : cur.deadline,
         jumlah !== undefined ? Number(jumlah) || 1 : cur.jumlah,
         penanggung_jawab !== undefined ? penanggung_jawab : cur.penanggung_jawab,
         nextJenisBahan,
         nextUkuranMeter,
+        nextUkuranJahit,
         resep !== undefined ? resep : cur.resep,
         nextKeterangan,
         id,
@@ -872,7 +932,6 @@ app.delete(
 // --- Worker: tugas saya (paginasi + cari di API) ---
 app.get('/api/my-tasks', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.sub;
     let page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
     let limit = parseInt(String(req.query.limit || '10'), 10) || 10;
     if (limit > 10) limit = 10;
@@ -881,16 +940,17 @@ app.get('/api/my-tasks', authMiddleware, async (req, res) => {
     const rawSearch = String(req.query.search || '').trim();
     const forLike = rawSearch.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
-    let where = "WHERE ws.assigned_worker_id = ? AND ws.status <> 'done'";
-    const params = [userId];
+    let where = "WHERE 1=1";
+    const params = [];
     if (forLike) {
       where += ` AND (
         o.nama_pemesan LIKE ? OR
+        o.nama_usaha LIKE ? OR
         ws.nama_step LIKE ? OR
         CAST(o.id AS CHAR) LIKE ?
       )`;
       const p = `%${forLike}%`;
-      params.push(p, p, p);
+      params.push(p, p, p, p);
     }
 
     const [[countRow]] = await pool.query(
@@ -906,13 +966,16 @@ app.get('/api/my-tasks', authMiddleware, async (req, res) => {
     const offset = (page - 1) * limit;
 
     const [rows] = await pool.query(
-      `SELECT ws.*, o.nama_pemesan, o.deadline, o.jumlah,
+      `SELECT ws.*, o.nama_usaha, o.nama_pemesan, o.deadline, o.jumlah,
               u.username AS assigned_username
        FROM workflow_steps ws
        INNER JOIN orders o ON o.id = ws.order_id
        LEFT JOIN users u ON u.id = ws.assigned_worker_id
        ${where}
-       ORDER BY o.deadline ASC, ws.id ASC
+       ORDER BY
+         CASE ws.status WHEN 'progress' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
+         o.deadline ASC,
+         ws.id ASC
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );

@@ -1,6 +1,15 @@
 export function formatDate(d) {
   if (!d) return '—';
-  const x = typeof d === 'string' ? d.slice(0, 10) : d;
+  let x = d;
+  if (typeof d === 'string') {
+    const ymd = d.slice(0, 10);
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+    if (m) {
+      x = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    } else {
+      x = ymd;
+    }
+  }
   try {
     return new Intl.DateTimeFormat('id-ID', {
       day: 'numeric',

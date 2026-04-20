@@ -2,8 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  font-size: 17px;
+}
+
 body {
   @apply min-h-screen bg-white text-slate-900 antialiased;
+  line-height: 1.6;
+}
+
+@layer utilities {
+  .text-xs {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+  }
+
+  .text-sm {
+    font-size: 0.9375rem;
+    line-height: 1.4rem;
+  }
 }
 
 /* react-datepicker above modal (z-50) */

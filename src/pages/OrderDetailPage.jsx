@@ -38,6 +38,7 @@ export function OrderDetailPage() {
       setForm({
         nama_usaha: data.nama_usaha?.trim() ? data.nama_usaha : 'Batik Binar',
         nama_pemesan: data.nama_pemesan,
+        nomor_telepon_pelanggan: data.nomor_telepon_pelanggan ?? '',
         tanggal_pesanan: data.tanggal_pesanan?.slice?.(0, 10) ?? data.tanggal_pesanan,
         deadline: data.deadline?.slice?.(0, 10) ?? data.deadline,
         jumlah: data.jumlah,
@@ -47,6 +48,7 @@ export function OrderDetailPage() {
           data.ukuran_meter != null && data.ukuran_meter !== ''
             ? String(data.ukuran_meter)
             : '',
+        ukuran_jahit: data.ukuran_jahit ?? '',
         resep: data.resep ?? '',
         keterangan: data.keterangan ?? '',
       });
@@ -203,9 +205,14 @@ export function OrderDetailPage() {
           </p>
           <h1 className="mt-2 text-2xl font-bold text-batik-ink">{order.nama_pemesan}</h1>
           <p className="text-sm text-batik-indigo/70">
-            Deadline {formatDate(order.deadline)} · Jumlah {order.jumlah} · PJ: {order.penanggung_jawab}
+            Pesanan #{order.id} · Deadline {formatDate(order.deadline)} · Jumlah {order.jumlah} · PJ:{' '}
+            {order.penanggung_jawab}
           </p>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-batik-indigo/85">
+            <span>
+              <span className="font-medium text-batik-ink/80">Nomor telp:</span>{' '}
+              {order.nomor_telepon_pelanggan?.trim() || '—'}
+            </span>
             <span>
               <span className="font-medium text-batik-ink/80">Jenis kain:</span>{' '}
               {order.jenis_bahan?.trim() ? order.jenis_bahan : '—'}
@@ -215,6 +222,10 @@ export function OrderDetailPage() {
               {order.ukuran_meter != null && order.ukuran_meter !== ''
                 ? `${Number(order.ukuran_meter)} m`
                 : '—'}
+            </span>
+            <span>
+              <span className="font-medium text-batik-ink/80">Ukuran jahit:</span>{' '}
+              {order.ukuran_jahit?.trim() || '—'}
             </span>
           </div>
         </div>
@@ -256,7 +267,7 @@ export function OrderDetailPage() {
           <h2 className="text-lg font-semibold text-batik-ink">Edit detail pesanan</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="text-sm font-medium text-batik-ink">Nama usaha</label>
+              <label className="text-sm font-medium text-batik-ink">Nama pesanan</label>
               <input
                 className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
                 value={form.nama_usaha ?? ''}
@@ -277,6 +288,17 @@ export function OrderDetailPage() {
                 />
               </div>
             ))}
+            <div>
+              <label className="text-sm font-medium text-batik-ink">Nomor telepon pelanggan</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
+                value={form.nomor_telepon_pelanggan ?? ''}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, nomor_telepon_pelanggan: e.target.value }))
+                }
+                placeholder="Contoh: 08xxxxxxxxxx"
+              />
+            </div>
             <div>
               <label className="text-sm font-medium text-batik-ink">Tanggal pesanan</label>
               <input
@@ -326,6 +348,15 @@ export function OrderDetailPage() {
                 value={form.ukuran_meter ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, ukuran_meter: e.target.value }))}
                 placeholder="Opsional"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-batik-ink">Ukuran jahit</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-batik-teal/20 px-3 py-2 text-sm"
+                value={form.ukuran_jahit ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, ukuran_jahit: e.target.value }))}
+                placeholder="Contoh: S/M/L/XL/XXL"
               />
             </div>
           </div>
@@ -466,7 +497,7 @@ export function OrderDetailPage() {
 
       <section className="rounded-2xl border border-batik-teal/15 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-batik-ink">Workflow produksi</h2>
+          <h2 className="text-lg font-semibold text-batik-ink">Tugas produksi</h2>
         </div>
 
         {manager && (
@@ -558,8 +589,7 @@ export function OrderDetailPage() {
             <div>
               <h2 className="text-lg font-semibold text-batik-ink">Ringkasan pesanan</h2>
               <p className="text-xs text-batik-indigo/60">
-                Owner/supervisor selalu melihat riwayat lengkap. Pekerja tidak lagi mengakses pesanan
-                setelah tahap mereka selesai.
+                Owner/supervisor melihat ringkasan penuh untuk monitoring produksi dan biaya tahap.
               </p>
             </div>
             <span
@@ -575,7 +605,7 @@ export function OrderDetailPage() {
 
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <dt className="text-xs text-slate-500">Usaha</dt>
+              <dt className="text-xs text-slate-500">Nama pesanan</dt>
               <dd className="font-medium text-batik-ink">{order.nama_usaha || 'Batik Binar'}</dd>
             </div>
             <div>
@@ -585,6 +615,12 @@ export function OrderDetailPage() {
             <div>
               <dt className="text-xs text-slate-500">PJ</dt>
               <dd className="font-medium text-batik-ink">{order.penanggung_jawab}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Nomor telepon pelanggan</dt>
+              <dd className="font-medium text-batik-ink">
+                {order.nomor_telepon_pelanggan?.trim() || '—'}
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-slate-500">Tanggal pesanan</dt>
@@ -611,6 +647,10 @@ export function OrderDetailPage() {
                   ? `${Number(order.ukuran_meter)} m`
                   : '—'}
               </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Ukuran jahit</dt>
+              <dd className="font-medium text-batik-ink">{order.ukuran_jahit?.trim() || '—'}</dd>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <dt className="text-xs text-slate-500">Resep / instruksi</dt>

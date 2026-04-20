@@ -23,6 +23,14 @@ function toYmd(date) {
   return date ? format(date, 'yyyy-MM-dd') : '';
 }
 
+function todayYmdLocal() {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+
+function currentMonthStartYmdLocal() {
+  return `${format(new Date(), 'yyyy-MM')}-01`;
+}
+
 const PRESET_AMOUNTS = [1700, 5000, 7500, 10000, 15000, 17000, 20000, 25000, 50000];
 
 /** @type {import('react-select').StylesConfig<{ value: string; label: string }, false>} */
@@ -61,11 +69,11 @@ export function DailyWagesPage() {
   const [totalIncluded, setTotalIncluded] = useState(0);
   const [totalAll, setTotalAll] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 7) + '-01');
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [from, setFrom] = useState(() => currentMonthStartYmdLocal());
+  const [to, setTo] = useState(() => todayYmdLocal());
   const [workerFilter, setWorkerFilter] = useState('');
   const [form, setForm] = useState({
-    work_date: new Date().toISOString().slice(0, 10),
+    work_date: todayYmdLocal(),
     worker_id: '',
     jenis_pekerjaan: '',
     amount: '',

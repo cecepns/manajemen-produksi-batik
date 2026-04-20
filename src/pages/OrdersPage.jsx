@@ -33,29 +33,40 @@ const emptyStep = () => ({
 });
 
 const STEP_PRESETS = [
-  'Pewarnaan awal',
-  'Detail motif',
-  'Finishing',
-  'Celup / malam',
-  'Klowong',
-  'Nyanting',
-  'Pelorodan',
-  'Packing',
+  'Tahap cap',
+  'Tahap warna',
+  'Tahap finish',
 ];
 
 const defaultSteps = () => STEP_PRESETS.map((nama_step) => ({ ...emptyStep(), nama_step }));
 
 const MAX_FOTO_AWAL_CREATE = 6;
 
+function todayYmdLocal() {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+
+function orderRowToneClass(orderId) {
+  const tones = [
+    'hover:bg-teal-50/60',
+    'hover:bg-amber-50/70',
+    'hover:bg-indigo-50/60',
+    'hover:bg-emerald-50/60',
+  ];
+  return tones[Math.abs(Number(orderId || 0)) % tones.length];
+}
+
 const defaultForm = () => ({
   nama_usaha: 'Batik Binar',
   nama_pemesan: '',
-  tanggal_pesanan: new Date().toISOString().slice(0, 10),
+  nomor_telepon_pelanggan: '',
+  tanggal_pesanan: todayYmdLocal(),
   deadline: '',
   jumlah: 1,
   penanggung_jawab: '',
   jenis_bahan: '',
   ukuran_meter: '',
+  ukuran_jahit: '',
   resep: '',
   keterangan: '',
 });
@@ -72,6 +83,7 @@ export function OrdersPage() {
   const [steps, setSteps] = useState(() => defaultSteps());
   const [saving, setSaving] = useState(false);
   const [editFetchId, setEditFetchId] = useState(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   /** @type {[File[], function]} */
   const [createFotoAwal, setCreateFotoAwal] = useState([]);
   const [compressingFoto, setCompressingFoto] = useState(false);
@@ -172,7 +184,7 @@ export function OrdersPage() {
   async function load() {
     setLoading(true);
     try {
-      const list = await api.get('/orders');
+      const list = await api.get(`/orders${showCompleted ? '?include_completed=1' : ''}`);
       setOrders(list);
       if (manager) {
         const w = await api.get('/users/workers');
@@ -188,7 +200,7 @@ export function OrdersPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- muat ulang saat mount / peran
-  }, []);
+  }, [showCompleted]);
 
   function resetOrderModal() {
     stopCameraStream();
@@ -222,6 +234,7 @@ export function OrdersPage() {
       setForm({
         nama_usaha: data.nama_usaha?.trim() ? data.nama_usaha : 'Batik Binar',
         nama_pemesan: data.nama_pemesan ?? '',
+        nomor_telepon_pelanggan: data.nomor_telepon_pelanggan ?? '',
         tanggal_pesanan: data.tanggal_pesanan?.slice?.(0, 10) ?? data.tanggal_pesanan ?? '',
         deadline: data.deadline?.slice?.(0, 10) ?? data.deadline ?? '',
         jumlah: data.jumlah ?? 1,
@@ -231,6 +244,7 @@ export function OrdersPage() {
           data.ukuran_meter != null && data.ukuran_meter !== ''
             ? String(data.ukuran_meter)
             : '',
+        ukuran_jahit: data.ukuran_jahit ?? '',
         resep: data.resep ?? '',
         keterangan: data.keterangan ?? '',
       });
@@ -385,6 +399,12 @@ export function OrdersPage() {
           const fd = new FormData();
           fd.append('nama_usaha', String(payload.nama_usaha ?? ''));
           fd.append('nama_pemesan', String(payload.nama_pemesan ?? ''));
+          fd.append(
+            'nomor_telepon_pelanggan',
+            payload.nomor_telepon_pelanggan != null
+              ? String(payload.nomor_telepon_pelanggan)
+              : ''
+          );
           fd.append('tanggal_pesanan', String(payload.tanggal_pesanan ?? ''));
           fd.append('deadline', String(payload.deadline ?? ''));
           fd.append('jumlah', String(payload.jumlah ?? 1));
@@ -396,6 +416,7 @@ export function OrdersPage() {
               ? String(payload.ukuran_meter)
               : ''
           );
+          fd.append('ukuran_jahit', payload.ukuran_jahit != null ? String(payload.ukuran_jahit) : '');
           fd.append('resep', payload.resep != null ? String(payload.resep) : '');
           fd.append(
             'keterangan',
@@ -429,19 +450,34 @@ export function OrdersPage() {
         <div>
           <h1 className="text-2xl font-bold text-batik-ink">Pesanan</h1>
           <p className="text-sm text-batik-indigo/70">
-            {manager ? 'Kelola pesanan dan alur produksi.' : 'Pesanan yang terkait tugas Anda.'}
+            {manager
+              ? 'Kelola pesanan aktif dan tugas produksi.'
+              : 'Pesanan aktif yang terkait produksi.'}
           </p>
         </div>
-        {manager && (
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-xl bg-batik-indigo px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-batik-teal"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            Pesanan baru
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {manager && (
+            <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="rounded border-slate-300 text-batik-teal focus:ring-batik-teal/40"
+              />
+              Tampilkan pesanan selesai
+            </label>
+          )}
+          {manager && (
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 rounded-xl bg-batik-indigo px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-batik-teal"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Pesanan baru
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
@@ -454,7 +490,8 @@ export function OrdersPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Usaha / pemesan</th>
+                  <th className="px-4 py-3">No pesanan</th>
+                  <th className="px-4 py-3">Nama pesanan / pemesan</th>
                   <th className="px-4 py-3">Tanggal</th>
                   <th className="px-4 py-3">Deadline</th>
                   <th className="px-4 py-3">Jumlah</th>
@@ -465,12 +502,20 @@ export function OrdersPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {orders.map((o) => (
-                  <tr key={o.id} className="transition hover:bg-slate-50/80">
+                  <tr key={o.id} className={`transition ${orderRowToneClass(o.id)}`}>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full bg-batik-indigo/10 px-2.5 py-1 text-xs font-semibold text-batik-indigo">
+                        #{o.id}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <p className="text-xs font-medium uppercase tracking-wide text-batik-teal/90">
                         {o.nama_usaha || 'Batik Binar'}
                       </p>
                       <p className="font-medium text-batik-ink">{o.nama_pemesan}</p>
+                      <p className="mt-1 text-xs text-batik-indigo/70">
+                        {o.nomor_telepon_pelanggan?.trim() || 'Tanpa nomor telepon'}
+                      </p>
                       <p className="mt-1 text-xs leading-snug text-batik-indigo/70">
                         <span className="font-medium text-batik-indigo/80">Jenis kain:</span>{' '}
                         {o.jenis_bahan?.trim() ? o.jenis_bahan : '—'}
@@ -479,6 +524,9 @@ export function OrdersPage() {
                         {o.ukuran_meter != null && o.ukuran_meter !== ''
                           ? `${Number(o.ukuran_meter)} m`
                           : '—'}
+                        <span className="mx-1.5 text-batik-indigo/40">·</span>
+                        <span className="font-medium text-batik-indigo/80">Ukuran jahit:</span>{' '}
+                        {o.ukuran_jahit?.trim() || '—'}
                       </p>
                     </td>
                     <td className="px-4 py-3 text-batik-indigo/80">{formatDate(o.tanggal_pesanan)}</td>
@@ -563,7 +611,7 @@ export function OrdersPage() {
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
-                  label="Nama usaha"
+                  label="Nama pesanan"
                   value={form.nama_usaha}
                   onChange={(v) => setForm((f) => ({ ...f, nama_usaha: v }))}
                   required
@@ -573,6 +621,12 @@ export function OrdersPage() {
                   value={form.nama_pemesan}
                   onChange={(v) => setForm((f) => ({ ...f, nama_pemesan: v }))}
                   required
+                />
+                <Field
+                  label="Nomor telepon pelanggan"
+                  value={form.nomor_telepon_pelanggan}
+                  onChange={(v) => setForm((f) => ({ ...f, nomor_telepon_pelanggan: v }))}
+                  placeholder="Contoh: 08xxxxxxxxxx"
                 />
                 <Field
                   label="Penanggung jawab"
@@ -612,6 +666,12 @@ export function OrdersPage() {
                   value={form.ukuran_meter}
                   onChange={(v) => setForm((f) => ({ ...f, ukuran_meter: v }))}
                   placeholder="Opsional"
+                />
+                <Field
+                  label="Ukuran jahit"
+                  value={form.ukuran_jahit}
+                  onChange={(v) => setForm((f) => ({ ...f, ukuran_jahit: v }))}
+                  placeholder="Contoh: S/M/L/XL/XXL"
                 />
               </div>
               {orderModal.mode === 'create' ? (
@@ -718,7 +778,7 @@ export function OrdersPage() {
                 <div className="mt-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-medium text-batik-ink">
-                      Tahapan workflow (minimal 1, Tambah tahapan jika diperlukan)
+                      Tugas produksi (minimal 1, bisa ditambah sesuai kebutuhan)
                     </p>
                     <button
                       type="button"
@@ -798,7 +858,7 @@ export function OrdersPage() {
                 </div>
               ) : (
                 <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
-                  Tahapan workflow diubah lewat{' '}
+                  Tugas produksi diubah lewat{' '}
                   <Link
                     to={ROUTES.orderDetail(orderModal.id)}
                     className="font-medium text-batik-teal hover:underline"
@@ -880,7 +940,7 @@ export function OrdersPage() {
   );
 }
 
-function Field({ label, value, onChange, type = 'text', required, min }) {
+function Field({ label, value, onChange, type = 'text', required, min, step, placeholder }) {
   return (
     <div>
       <label className="block text-sm font-medium text-batik-ink">{label}</label>
@@ -888,6 +948,8 @@ function Field({ label, value, onChange, type = 'text', required, min }) {
         type={type}
         required={required}
         min={min}
+        step={step}
+        placeholder={placeholder}
         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none ring-batik-teal/30 focus:ring-2"
         value={value}
         onChange={(e) => onChange(e.target.value)}

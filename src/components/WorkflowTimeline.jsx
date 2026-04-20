@@ -6,7 +6,7 @@ export function WorkflowTimeline({ steps }) {
   if (!steps?.length) {
     return (
       <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
-        Belum ada tahapan workflow.
+        Belum ada tugas produksi.
       </p>
     );
   }
