@@ -1,15 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Search } from 'lucide-react';
 import { api } from '../services/api';
 import { ROUTES } from '../constants/routes';
 import { formatDate } from '../utils/formatDate';
+
+const PAGE_SIZE = 10;
+const SEARCH_DEBOUNCE_MS = 800;
 
 export function OrderHistoryPage() {
   const { manager } = useOutletContext();
   const [loading, setLoading] = useState(true);
   const [historyOrders, setHistoryOrders] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -20,14 +37,24 @@ export function OrderHistoryPage() {
       }
       setLoading(true);
       try {
-        const all = await api.get('/orders?include_completed=1');
-        if (cancelled) return;
-        const doneOnly = (all || []).filter((o) => {
-          const total = Number(o.total_steps) || 0;
-          const done = Number(o.done_steps) || 0;
-          return total > 0 && done >= total;
+        const q = new URLSearchParams({
+          page: String(page),
+          limit: String(PAGE_SIZE),
+          only_completed: '1',
         });
-        setHistoryOrders(doneOnly);
+        if (debouncedSearch) q.set('search', debouncedSearch);
+        const data = await api.get(`/orders?${q.toString()}`);
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? data : data?.data || [];
+        const totalRows = Array.isArray(data) ? rows.length : data?.total ?? rows.length;
+        const pages = Array.isArray(data)
+          ? Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
+          : data?.totalPages ?? 1;
+        const nextPage = Array.isArray(data) ? page : data?.page ?? page;
+        setHistoryOrders(rows);
+        setTotal(totalRows);
+        setTotalPages(pages);
+        setPage(nextPage);
       } catch (e) {
         if (!cancelled) toast.error(e.message);
       } finally {
@@ -37,11 +64,14 @@ export function OrderHistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [manager]);
+  }, [manager, page, debouncedSearch]);
 
   if (!manager) {
     return <p className="text-sm text-batik-indigo/60">Halaman ini khusus owner/supervisor.</p>;
   }
+
+  const startItem = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const endItem = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="space-y-6">
@@ -53,11 +83,29 @@ export function OrderHistoryPage() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-white p-3">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              placeholder="Cari nama pesanan, pemesan, PJ, nomor telepon, atau nomor pesanan…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none ring-batik-teal/30 placeholder:text-slate-400 focus:ring-2"
+              autoComplete="off"
+            />
+          </div>
+        </div>
         {loading ? (
           <p className="p-8 text-center text-sm text-batik-indigo/60">Memuat data…</p>
         ) : historyOrders.length === 0 ? (
           <p className="p-8 text-center text-sm text-batik-indigo/60">
-            Belum ada pesanan yang selesai.
+            {debouncedSearch
+              ? `Tidak ada history pesanan cocok dengan “${debouncedSearch}”.`
+              : 'Belum ada pesanan yang selesai.'}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -106,6 +154,36 @@ export function OrderHistoryPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {!loading && total > 0 && (
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              Menampilkan {startItem}–{endItem} dari {total} history pesanan
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+                Sebelumnya
+              </button>
+              <span className="min-w-[7rem] text-center text-sm text-slate-600">
+                Halaman {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Berikutnya
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
           </div>
         )}
       </div>

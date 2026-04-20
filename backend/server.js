@@ -350,9 +350,51 @@ app.delete('/api/admin/users/:id', authMiddleware, requireRole('owner'), async (
 app.get('/api/orders', authMiddleware, async (req, res) => {
   try {
     const { role } = req.user;
+    let page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    let limit = parseInt(String(req.query.limit || '10'), 10) || 10;
+    if (limit > 10) limit = 10;
+    if (limit < 1) limit = 10;
     const includeCompleted = String(req.query.include_completed || '') === '1';
+    const onlyCompleted = String(req.query.only_completed || '') === '1';
+    const rawSearch = String(req.query.search || '').trim();
+    const forLike = rawSearch.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+
     let rows;
+    let countRow;
     if (isManager(role)) {
+      let where = '';
+      const params = [];
+      if (onlyCompleted) {
+        where +=
+          'WHERE COALESCE(w.total_steps, 0) > 0 AND COALESCE(w.done_steps, 0) >= COALESCE(w.total_steps, 0)';
+      } else if (!includeCompleted) {
+        where +=
+          'WHERE COALESCE(w.total_steps, 0) = 0 OR COALESCE(w.done_steps, 0) < COALESCE(w.total_steps, 0)';
+      }
+      if (forLike) {
+        const p = `%${forLike}%`;
+        where += where
+          ? ` AND (o.nama_usaha LIKE ? OR o.nama_pemesan LIKE ? OR o.penanggung_jawab LIKE ? OR COALESCE(o.nomor_telepon_pelanggan, '') LIKE ? OR CAST(o.id AS CHAR) LIKE ?)`
+          : `WHERE (o.nama_usaha LIKE ? OR o.nama_pemesan LIKE ? OR o.penanggung_jawab LIKE ? OR COALESCE(o.nomor_telepon_pelanggan, '') LIKE ? OR CAST(o.id AS CHAR) LIKE ?)`;
+        params.push(p, p, p, p, p);
+      }
+      [[countRow]] = await pool.query(
+        `SELECT COUNT(*) AS total
+           FROM orders o
+           LEFT JOIN (
+             SELECT order_id,
+                    COUNT(*) AS total_steps,
+                    SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_steps
+               FROM workflow_steps
+              GROUP BY order_id
+           ) w ON w.order_id = o.id
+          ${where}`,
+        params
+      );
+      const total = countRow.total;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      if (page > totalPages) page = totalPages;
+      const nextOffset = (page - 1) * limit;
       [rows] = await pool.query(
         `SELECT o.*,
                 COALESCE(w.total_steps, 0) AS total_steps,
@@ -365,15 +407,49 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                FROM workflow_steps
               GROUP BY order_id
            ) w ON w.order_id = o.id
-          WHERE (
-            ? = 1 OR
-            COALESCE(w.total_steps, 0) = 0 OR
-            COALESCE(w.done_steps, 0) < COALESCE(w.total_steps, 0)
-          )
-          ORDER BY o.tanggal_pesanan DESC, o.id DESC`,
-        [includeCompleted ? 1 : 0]
+          ${where}
+          ORDER BY o.tanggal_pesanan DESC, o.id DESC
+          LIMIT ? OFFSET ?`,
+        [...params, limit, nextOffset]
       );
+      return res.json({
+        data: rows,
+        total,
+        page,
+        limit,
+        totalPages,
+      });
     } else {
+      let where = 'WHERE COALESCE(w.total_steps, 0) > 0';
+      const params = [];
+      if (onlyCompleted) {
+        where += ' AND COALESCE(w.done_steps, 0) >= COALESCE(w.total_steps, 0)';
+      } else if (!includeCompleted) {
+        where += ' AND COALESCE(w.done_steps, 0) < COALESCE(w.total_steps, 0)';
+      }
+      if (forLike) {
+        const p = `%${forLike}%`;
+        where +=
+          ' AND (o.nama_usaha LIKE ? OR o.nama_pemesan LIKE ? OR o.penanggung_jawab LIKE ? OR COALESCE(o.nomor_telepon_pelanggan, \'\') LIKE ? OR CAST(o.id AS CHAR) LIKE ?)';
+        params.push(p, p, p, p, p);
+      }
+      [[countRow]] = await pool.query(
+        `SELECT COUNT(*) AS total
+           FROM orders o
+           LEFT JOIN (
+             SELECT order_id,
+                    COUNT(*) AS total_steps,
+                    SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_steps
+               FROM workflow_steps
+              GROUP BY order_id
+           ) w ON w.order_id = o.id
+          ${where}`,
+        params
+      );
+      const total = countRow.total;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      if (page > totalPages) page = totalPages;
+      const nextOffset = (page - 1) * limit;
       [rows] = await pool.query(
         `SELECT o.*,
                 COALESCE(w.total_steps, 0) AS total_steps,
@@ -386,16 +462,19 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                FROM workflow_steps
               GROUP BY order_id
            ) w ON w.order_id = o.id
-          WHERE COALESCE(w.total_steps, 0) > 0
-            AND (
-              ? = 1 OR
-              COALESCE(w.done_steps, 0) < COALESCE(w.total_steps, 0)
-            )
-          ORDER BY o.tanggal_pesanan DESC, o.id DESC`,
-        [includeCompleted ? 1 : 0]
+          ${where}
+          ORDER BY o.tanggal_pesanan DESC, o.id DESC
+          LIMIT ? OFFSET ?`,
+        [...params, limit, nextOffset]
       );
+      return res.json({
+        data: rows,
+        total,
+        page,
+        limit,
+        totalPages,
+      });
     }
-    res.json(rows);
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Server error' });

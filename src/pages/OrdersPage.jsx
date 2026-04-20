@@ -4,7 +4,18 @@ import DatePicker, { registerLocale } from 'react-datepicker';
 import { format, isValid, parse } from 'date-fns';
 import { id as localeId } from 'date-fns/locale/id';
 import { toast } from 'react-toastify';
-import { Plus, Save, ChevronRight, Pencil, Trash2, X, Camera, Images } from 'lucide-react';
+import {
+  Plus,
+  Save,
+  ChevronRight,
+  ChevronLeft,
+  Pencil,
+  Trash2,
+  X,
+  Camera,
+  Images,
+  Search,
+} from 'lucide-react';
 import { confirmWithToast } from '../utils/toastConfirm';
 import { compressOrderPhoto } from '../utils/compressOrderPhoto';
 import { api } from '../services/api';
@@ -41,6 +52,8 @@ const STEP_PRESETS = [
 const defaultSteps = () => STEP_PRESETS.map((nama_step) => ({ ...emptyStep(), nama_step }));
 
 const MAX_FOTO_AWAL_CREATE = 6;
+const PAGE_SIZE = 10;
+const SEARCH_DEBOUNCE_MS = 800;
 
 function todayYmdLocal() {
   return format(new Date(), 'yyyy-MM-dd');
@@ -83,6 +96,12 @@ export function OrdersPage() {
   const [steps, setSteps] = useState(() => defaultSteps());
   const [saving, setSaving] = useState(false);
   const [editFetchId, setEditFetchId] = useState(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [listVersion, setListVersion] = useState(0);
   /** @type {[File[], function]} */
   const [createFotoAwal, setCreateFotoAwal] = useState([]);
   const [compressingFoto, setCompressingFoto] = useState(false);
@@ -180,11 +199,34 @@ export function OrdersPage() {
     }
   }
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   async function load() {
     setLoading(true);
     try {
-      const list = await api.get('/orders');
-      setOrders(list);
+      const q = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+      });
+      if (debouncedSearch) q.set('search', debouncedSearch);
+      const list = await api.get(`/orders?${q.toString()}`);
+      const rows = Array.isArray(list) ? list : list?.data || [];
+      const totalRows = Array.isArray(list) ? rows.length : list?.total ?? rows.length;
+      const pages = Array.isArray(list)
+        ? Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
+        : list?.totalPages ?? 1;
+      const nextPage = Array.isArray(list) ? page : list?.page ?? page;
+      setOrders(rows);
+      setTotal(totalRows);
+      setTotalPages(pages);
+      setPage(nextPage);
       if (manager) {
         const w = await api.get('/users/workers');
         setWorkers(w);
@@ -198,8 +240,8 @@ export function OrdersPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- muat ulang saat mount / peran
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sinkron pagination/cari
+  }, [page, debouncedSearch, listVersion]);
 
   function resetOrderModal() {
     stopCameraStream();
@@ -262,7 +304,7 @@ export function OrdersPage() {
         try {
           await api.delete(`/orders/${row.id}`);
           toast.success('Pesanan dihapus');
-          await load();
+          setListVersion((v) => v + 1);
         } catch (e) {
           toast.error(e.message);
         }
@@ -435,13 +477,16 @@ export function OrdersPage() {
         toast.success('Pesanan diperbarui');
       }
       resetOrderModal();
-      await load();
+      setListVersion((v) => v + 1);
     } catch (err) {
       toast.error(err.message);
     } finally {
       setSaving(false);
     }
   }
+
+  const startItem = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const endItem = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="space-y-6">
@@ -469,10 +514,30 @@ export function OrdersPage() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-white p-3">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              placeholder="Cari nama pesanan, pemesan, nomor telepon, PJ, atau nomor pesanan…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none ring-batik-teal/30 placeholder:text-slate-400 focus:ring-2"
+              autoComplete="off"
+            />
+          </div>
+        </div>
         {loading ? (
           <p className="p-8 text-center text-sm text-batik-indigo/60">Memuat data…</p>
         ) : orders.length === 0 ? (
-          <p className="p-8 text-center text-sm text-batik-indigo/60">Belum ada pesanan.</p>
+          <p className="p-8 text-center text-sm text-batik-indigo/60">
+            {debouncedSearch
+              ? `Tidak ada pesanan cocok dengan “${debouncedSearch}”.`
+              : 'Belum ada pesanan.'}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
@@ -566,6 +631,36 @@ export function OrdersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {!loading && total > 0 && (
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              Menampilkan {startItem}–{endItem} dari {total} pesanan
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+                Sebelumnya
+              </button>
+              <span className="min-w-[7rem] text-center text-sm text-slate-600">
+                Halaman {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Berikutnya
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
           </div>
         )}
       </div>
