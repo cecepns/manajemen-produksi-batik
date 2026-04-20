@@ -83,7 +83,6 @@ export function OrdersPage() {
   const [steps, setSteps] = useState(() => defaultSteps());
   const [saving, setSaving] = useState(false);
   const [editFetchId, setEditFetchId] = useState(null);
-  const [showCompleted, setShowCompleted] = useState(false);
   /** @type {[File[], function]} */
   const [createFotoAwal, setCreateFotoAwal] = useState([]);
   const [compressingFoto, setCompressingFoto] = useState(false);
@@ -184,7 +183,7 @@ export function OrdersPage() {
   async function load() {
     setLoading(true);
     try {
-      const list = await api.get(`/orders${showCompleted ? '?include_completed=1' : ''}`);
+      const list = await api.get('/orders');
       setOrders(list);
       if (manager) {
         const w = await api.get('/users/workers');
@@ -200,7 +199,7 @@ export function OrdersPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- muat ulang saat mount / peran
-  }, [showCompleted]);
+  }, []);
 
   function resetOrderModal() {
     stopCameraStream();
@@ -456,17 +455,6 @@ export function OrdersPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {manager && (
-            <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={showCompleted}
-                onChange={(e) => setShowCompleted(e.target.checked)}
-                className="rounded border-slate-300 text-batik-teal focus:ring-batik-teal/40"
-              />
-              Tampilkan pesanan selesai
-            </label>
-          )}
           {manager && (
             <button
               type="button"

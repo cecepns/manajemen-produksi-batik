@@ -6,8 +6,10 @@ import { MainLayout } from '../layouts/MainLayout';
 import { LoginPage } from '../pages/LoginPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { OrdersPage } from '../pages/OrdersPage';
+import { OrderHistoryPage } from '../pages/OrderHistoryPage';
 import { OrderDetailPage } from '../pages/OrderDetailPage';
 import { MyTasksPage } from '../pages/MyTasksPage';
+import { HppCalculatorPage } from '../pages/HppCalculatorPage';
 import { DailyWagesPage } from '../pages/DailyWagesPage';
 import { UsersAdminPage } from '../pages/UsersAdminPage';
 import { ROUTES } from '../constants/routes';
@@ -46,8 +48,10 @@ export function AppRouter() {
         >
           <Route path={ROUTES.dashboard} element={<DashboardPage />} />
           <Route path={ROUTES.orders} element={<OrdersPage />} />
+          <Route path={ROUTES.orderHistory} element={<OrderHistoryPage />} />
           <Route path="/pesanan/:id" element={<OrderDetailPage />} />
           <Route path={ROUTES.myTasks} element={<MyTasksPage />} />
+          <Route path={ROUTES.hppCalculator} element={<HppCalculatorPage />} />
           <Route path={ROUTES.dailyWages} element={<DailyWagesPage />} />
           <Route path={ROUTES.adminUsers} element={<UsersAdminPage />} />
         </Route>

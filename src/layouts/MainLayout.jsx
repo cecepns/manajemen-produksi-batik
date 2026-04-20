@@ -7,6 +7,8 @@ import {
   Factory,
   Users,
   Wallet,
+  History,
+  Calculator,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../constants/routes';
@@ -49,10 +51,22 @@ export function MainLayout() {
             <ClipboardList className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
             <span>Pesanan</span>
           </NavLink>
+          {manager && (
+            <NavLink to={ROUTES.orderHistory} className={linkClass}>
+              <History className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+              <span>History</span>
+            </NavLink>
+          )}
           <NavLink to={ROUTES.myTasks} className={linkClass}>
             <ListTodo className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
             <span>Tugas saya</span>
           </NavLink>
+          {manager && (
+            <NavLink to={ROUTES.hppCalculator} className={linkClass}>
+              <Calculator className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+              <span>Kalkulator HPP</span>
+            </NavLink>
+          )}
           {manager && (
             <NavLink to={ROUTES.dailyWages} className={linkClass}>
               <Wallet className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
