@@ -185,24 +185,24 @@ export function MyTasksPage() {
             <p className="text-xs text-slate-500">
               Menampilkan {startItem}–{endItem} dari {total} tugas
             </p>
-            <div className="flex items-center gap-2">
+            <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:items-center">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:px-3"
               >
                 <ChevronLeft className="h-4 w-4" aria-hidden />
                 Sebelumnya
               </button>
-              <span className="min-w-[7rem] text-center text-sm text-slate-600">
+              <span className="inline-flex h-9 items-center justify-center text-center text-sm text-slate-600 sm:min-w-[7rem]">
                 Halaman {page} / {totalPages}
               </span>
               <button
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:px-3"
               >
                 Berikutnya
                 <ChevronRight className="h-4 w-4" aria-hidden />
