@@ -99,9 +99,9 @@ async function canAccessOrder(user, orderId) {
   if (isManager(user.role)) return true;
   const [rows] = await pool.query(
     `SELECT 1 FROM workflow_steps
-     WHERE order_id = ?
+     WHERE order_id = ? AND assigned_worker_id = ?
      LIMIT 1`,
-    [orderId]
+    [orderId, user.sub]
   );
   return rows.length > 0;
 }
@@ -420,8 +420,9 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
         totalPages,
       });
     } else {
+      const workerId = Number(req.user.sub);
       let where = 'WHERE COALESCE(w.total_steps, 0) > 0';
-      const params = [];
+      const params = [workerId];
       if (onlyCompleted) {
         where += ' AND COALESCE(w.done_steps, 0) >= COALESCE(w.total_steps, 0)';
       } else if (!includeCompleted) {
@@ -441,6 +442,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                     COUNT(*) AS total_steps,
                     SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_steps
                FROM workflow_steps
+              WHERE assigned_worker_id = ?
               GROUP BY order_id
            ) w ON w.order_id = o.id
           ${where}`,
@@ -460,6 +462,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                     COUNT(*) AS total_steps,
                     SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_steps
                FROM workflow_steps
+              WHERE assigned_worker_id = ?
               GROUP BY order_id
            ) w ON w.order_id = o.id
           ${where}
@@ -495,7 +498,7 @@ app.get('/api/orders/:id', authMiddleware, async (req, res) => {
       'SELECT * FROM order_images WHERE order_id = ? ORDER BY id',
       [id]
     );
-    const [steps] = await pool.query(
+    let [steps] = await pool.query(
       `SELECT ws.*, u.username AS assigned_username
        FROM workflow_steps ws
        LEFT JOIN users u ON u.id = ws.assigned_worker_id
@@ -503,6 +506,10 @@ app.get('/api/orders/:id', authMiddleware, async (req, res) => {
        ORDER BY ws.id ASC`,
       [id]
     );
+    if (!isManager(req.user.role)) {
+      const uid = Number(req.user.sub);
+      steps = steps.filter((s) => Number(s.assigned_worker_id) === uid);
+    }
     res.json({ ...order, images, workflow_steps: steps });
   } catch (e) {
     console.error(e);
@@ -1019,8 +1026,12 @@ app.get('/api/my-tasks', authMiddleware, async (req, res) => {
     const rawSearch = String(req.query.search || '').trim();
     const forLike = rawSearch.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
-    let where = "WHERE 1=1";
+    let where = 'WHERE 1=1';
     const params = [];
+    if (!isManager(req.user.role)) {
+      where += ' AND ws.assigned_worker_id = ?';
+      params.push(req.user.sub);
+    }
     if (forLike) {
       where += ` AND (
         o.nama_pemesan LIKE ? OR
@@ -1072,56 +1083,102 @@ app.get('/api/my-tasks', authMiddleware, async (req, res) => {
   }
 });
 
-// --- Gaji harian pegawai ---
-function buildDailyWagesWhere(query) {
+// --- Kas harian (pemasukan / pengeluaran + saldo, kategori tetap) ---
+const CASHBOOK_CATEGORIES = [
+  { code: 'pemasukan_utama', label: 'Pemasukan', flow: 'in' },
+  { code: 'pemasukan_lain', label: 'Pemasukan lain', flow: 'in' },
+  { code: 'gaji_pegawai_cap', label: 'Gaji pegawai cap', flow: 'out' },
+  { code: 'gaji_pegawai_warna', label: 'Gaji pegawai warna', flow: 'out' },
+  { code: 'gaji_pegawai_lorod', label: 'Gaji pegawai lorod', flow: 'out' },
+  { code: 'gaji_pegawai_pembatik_pr', label: 'Gaji pegawai pembatik PR', flow: 'out' },
+  { code: 'gaji_lain_a', label: 'Gaji lain A', flow: 'out' },
+  { code: 'gaji_lain_b', label: 'Gaji lain B', flow: 'out' },
+  { code: 'gaji_lain_c', label: 'Gaji lain C', flow: 'out' },
+  { code: 'pengeluaran_a', label: 'Pengeluaran A', flow: 'out' },
+  { code: 'pengeluaran_b', label: 'Pengeluaran B', flow: 'out' },
+  { code: 'pengeluaran_c', label: 'Pengeluaran C', flow: 'out' },
+  { code: 'pengeluaran_lain', label: 'Pengeluaran lain', flow: 'out' },
+];
+
+const CASHBOOK_CATEGORY_BY_CODE = Object.fromEntries(
+  CASHBOOK_CATEGORIES.map((c) => [c.code, c])
+);
+
+function buildCashbookWhere(query) {
   const conditions = [];
   const params = [];
   const from = String(query.from || '').trim();
   const to = String(query.to || '').trim();
-  const workerId = query.worker_id ? Number(query.worker_id) : null;
+  const categoryCode = String(query.category_code || '').trim();
   if (from) {
-    conditions.push('dw.work_date >= ?');
+    conditions.push('e.entry_date >= ?');
     params.push(from);
   }
   if (to) {
-    conditions.push('dw.work_date <= ?');
+    conditions.push('e.entry_date <= ?');
     params.push(to);
   }
-  if (workerId) {
-    conditions.push('dw.worker_id = ?');
-    params.push(workerId);
+  if (categoryCode && CASHBOOK_CATEGORY_BY_CODE[categoryCode]) {
+    conditions.push('e.category_code = ?');
+    params.push(categoryCode);
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   return { where, params };
 }
 
+function cashbookRowOut(row) {
+  const meta = CASHBOOK_CATEGORY_BY_CODE[row.category_code];
+  return {
+    ...row,
+    category_label: meta?.label ?? row.category_code,
+  };
+}
+
 app.get(
-  '/api/daily-wages',
+  '/api/daily-cashbook/meta',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  (_req, res) => {
+    res.json({ categories: CASHBOOK_CATEGORIES });
+  }
+);
+
+app.get(
+  '/api/daily-cashbook',
   authMiddleware,
   requireRole('owner', 'supervisor'),
   async (req, res) => {
     try {
-      const { where, params } = buildDailyWagesWhere(req.query);
+      const { where, params } = buildCashbookWhere(req.query);
       const [rows] = await pool.query(
-        `SELECT dw.*, u.username AS worker_username
-         FROM daily_wages dw
-         INNER JOIN users u ON u.id = dw.worker_id
+        `SELECT e.*
+         FROM daily_cashbook_entries e
          ${where}
-         ORDER BY dw.work_date DESC, dw.id DESC`,
+         ORDER BY e.entry_date DESC, e.id DESC`,
         params
       );
       const [[sumRow]] = await pool.query(
         `SELECT
-           COALESCE(SUM(CASE WHEN dw.included_in_total = 1 THEN dw.amount ELSE 0 END), 0) AS total_included,
-           COALESCE(SUM(dw.amount), 0) AS total_all
-         FROM daily_wages dw
+           COALESCE(SUM(CASE WHEN e.flow_type = 'in' AND e.included_in_total = 1 THEN e.amount ELSE 0 END), 0) AS pemasukan_included,
+           COALESCE(SUM(CASE WHEN e.flow_type = 'out' AND e.included_in_total = 1 THEN e.amount ELSE 0 END), 0) AS pengeluaran_included,
+           COALESCE(SUM(CASE WHEN e.flow_type = 'in' THEN e.amount ELSE 0 END), 0) AS pemasukan_all,
+           COALESCE(SUM(CASE WHEN e.flow_type = 'out' THEN e.amount ELSE 0 END), 0) AS pengeluaran_all
+         FROM daily_cashbook_entries e
          ${where}`,
         params
       );
+      const pemIn = Number(sumRow.pemasukan_included) || 0;
+      const pengOut = Number(sumRow.pengeluaran_included) || 0;
+      const pemAll = Number(sumRow.pemasukan_all) || 0;
+      const pengAll = Number(sumRow.pengeluaran_all) || 0;
       res.json({
-        data: rows,
-        totalIncluded: Number(sumRow.total_included) || 0,
-        totalAll: Number(sumRow.total_all) || 0,
+        data: rows.map(cashbookRowOut),
+        pemasukanIncluded: pemIn,
+        pengeluaranIncluded: pengOut,
+        saldoIncluded: pemIn - pengOut,
+        pemasukanAll: pemAll,
+        pengeluaranAll: pengAll,
+        saldoAll: pemAll - pengAll,
       });
     } catch (e) {
       console.error(e);
@@ -1131,39 +1188,37 @@ app.get(
 );
 
 app.post(
-  '/api/daily-wages',
+  '/api/daily-cashbook',
   authMiddleware,
   requireRole('owner', 'supervisor'),
   async (req, res) => {
     try {
-      const { work_date, worker_id, jenis_pekerjaan, amount, included_in_total } = req.body || {};
-      if (!work_date || !worker_id) {
-        return res.status(400).json({ message: 'Tanggal dan pekerja wajib' });
+      const { entry_date, category_code, amount, note, included_in_total } = req.body || {};
+      if (!entry_date || !category_code) {
+        return res.status(400).json({ message: 'Tanggal dan kategori wajib' });
       }
-      const wid = Number(worker_id);
-      if (!wid) return res.status(400).json({ message: 'Pekerja tidak valid' });
+      const code = String(category_code).trim();
+      const cat = CASHBOOK_CATEGORY_BY_CODE[code];
+      if (!cat) return res.status(400).json({ message: 'Kategori tidak valid' });
       const amt = Number(amount);
       if (!Number.isFinite(amt) || amt < 0) {
         return res.status(400).json({ message: 'Nominal tidak valid' });
       }
-      const jenis = jenis_pekerjaan != null ? String(jenis_pekerjaan).trim() : '';
+      const noteTrim =
+        note != null && String(note).trim() ? String(note).trim().slice(0, 255) : null;
       const inc =
         included_in_total === false || included_in_total === 0 || included_in_total === '0'
           ? 0
           : 1;
       const [r] = await pool.query(
-        `INSERT INTO daily_wages (work_date, worker_id, jenis_pekerjaan, amount, included_in_total)
-         VALUES (?, ?, ?, ?, ?)`,
-        [work_date, wid, jenis, amt, inc]
+        `INSERT INTO daily_cashbook_entries (entry_date, category_code, flow_type, amount, note, included_in_total)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [entry_date, code, cat.flow, amt, noteTrim, inc]
       );
-      const [rows] = await pool.query(
-        `SELECT dw.*, u.username AS worker_username
-         FROM daily_wages dw
-         INNER JOIN users u ON u.id = dw.worker_id
-         WHERE dw.id = ?`,
-        [r.insertId]
-      );
-      res.status(201).json(rows[0]);
+      const [rows] = await pool.query('SELECT * FROM daily_cashbook_entries WHERE id = ?', [
+        r.insertId,
+      ]);
+      res.status(201).json(cashbookRowOut(rows[0]));
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: 'Server error' });
@@ -1172,7 +1227,7 @@ app.post(
 );
 
 app.patch(
-  '/api/daily-wages/:id',
+  '/api/daily-cashbook/:id',
   authMiddleware,
   requireRole('owner', 'supervisor'),
   async (req, res) => {
@@ -1187,16 +1242,13 @@ app.patch(
         included_in_total === false || included_in_total === 0 || included_in_total === '0'
           ? 0
           : 1;
-      await pool.query('UPDATE daily_wages SET included_in_total = ? WHERE id = ?', [inc, id]);
-      const [rows] = await pool.query(
-        `SELECT dw.*, u.username AS worker_username
-         FROM daily_wages dw
-         INNER JOIN users u ON u.id = dw.worker_id
-         WHERE dw.id = ?`,
-        [id]
-      );
+      await pool.query('UPDATE daily_cashbook_entries SET included_in_total = ? WHERE id = ?', [
+        inc,
+        id,
+      ]);
+      const [rows] = await pool.query('SELECT * FROM daily_cashbook_entries WHERE id = ?', [id]);
       if (!rows[0]) return res.status(404).json({ message: 'Entri tidak ditemukan' });
-      res.json(rows[0]);
+      res.json(cashbookRowOut(rows[0]));
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: 'Server error' });
@@ -1205,13 +1257,13 @@ app.patch(
 );
 
 app.delete(
-  '/api/daily-wages/:id',
+  '/api/daily-cashbook/:id',
   authMiddleware,
   requireRole('owner', 'supervisor'),
   async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const [r] = await pool.query('DELETE FROM daily_wages WHERE id = ?', [id]);
+      const [r] = await pool.query('DELETE FROM daily_cashbook_entries WHERE id = ?', [id]);
       if (r.affectedRows === 0) return res.status(404).json({ message: 'Entri tidak ditemukan' });
       res.json({ ok: true });
     } catch (e) {

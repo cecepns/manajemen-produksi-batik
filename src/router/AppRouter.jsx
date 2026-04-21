@@ -10,7 +10,7 @@ import { OrderHistoryPage } from '../pages/OrderHistoryPage';
 import { OrderDetailPage } from '../pages/OrderDetailPage';
 import { MyTasksPage } from '../pages/MyTasksPage';
 import { HppCalculatorPage } from '../pages/HppCalculatorPage';
-import { DailyWagesPage } from '../pages/DailyWagesPage';
+import { DailyCashbookPage } from '../pages/DailyCashbookPage';
 import { UsersAdminPage } from '../pages/UsersAdminPage';
 import { ROUTES } from '../constants/routes';
 
@@ -52,7 +52,8 @@ export function AppRouter() {
           <Route path="/pesanan/:id" element={<OrderDetailPage />} />
           <Route path={ROUTES.myTasks} element={<MyTasksPage />} />
           <Route path={ROUTES.hppCalculator} element={<HppCalculatorPage />} />
-          <Route path={ROUTES.dailyWages} element={<DailyWagesPage />} />
+          <Route path={ROUTES.dailyCashbook} element={<DailyCashbookPage />} />
+          <Route path="/gaji-harian" element={<Navigate to={ROUTES.dailyCashbook} replace />} />
           <Route path={ROUTES.adminUsers} element={<UsersAdminPage />} />
         </Route>
         <Route path="*" element={<Navigate to={ROUTES.dashboard} replace />} />

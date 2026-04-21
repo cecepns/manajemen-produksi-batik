@@ -69,22 +69,19 @@ CREATE TABLE IF NOT EXISTS workflow_steps (
     ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- gaji harian pegawai (opsional)
-CREATE TABLE IF NOT EXISTS daily_wages (
+-- kas harian: pemasukan / pengeluaran per kategori (mirip catatan HPP harian)
+CREATE TABLE IF NOT EXISTS daily_cashbook_entries (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  work_date DATE NOT NULL,
-  worker_id INT UNSIGNED NOT NULL,
-  jenis_pekerjaan VARCHAR(255) NOT NULL DEFAULT '',
+  entry_date DATE NOT NULL,
+  category_code VARCHAR(64) NOT NULL,
+  flow_type ENUM('in', 'out') NOT NULL,
   amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  note VARCHAR(255) NULL,
   included_in_total TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_daily_wages_worker
-    FOREIGN KEY (worker_id) REFERENCES users (id)
-    ON DELETE CASCADE
+  INDEX idx_daily_cash_date (entry_date),
+  INDEX idx_daily_cash_cat (category_code)
 ) ENGINE=InnoDB;
-
-CREATE INDEX idx_daily_wages_date ON daily_wages (work_date);
-CREATE INDEX idx_daily_wages_worker ON daily_wages (worker_id);
 
 CREATE INDEX idx_workflow_order ON workflow_steps (order_id);
 CREATE INDEX idx_workflow_worker ON workflow_steps (assigned_worker_id);

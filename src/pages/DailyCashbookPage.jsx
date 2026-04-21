@@ -5,7 +5,6 @@ import { format, isValid, parse } from 'date-fns';
 import { id as localeId } from 'date-fns/locale/id';
 import { toast } from 'react-toastify';
 import { Trash2 } from 'lucide-react';
-import Select from 'react-select';
 import { api } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { formatIdr } from '../utils/formatMoney';
@@ -33,76 +32,36 @@ function currentMonthStartYmdLocal() {
 
 const PRESET_AMOUNTS = [1700, 5000, 7500, 10000, 15000, 17000, 20000, 25000, 50000];
 
-/** @type {import('react-select').StylesConfig<{ value: string; label: string }, false>} */
-const workerSelectStyles = {
-  control: (base, state) => ({
-    ...base,
-    minHeight: 38,
-    borderRadius: '0.5rem',
-    borderColor: state.isFocused ? 'rgb(45 212 191 / 0.45)' : 'rgb(226 232 240)',
-    boxShadow: state.isFocused ? '0 0 0 2px rgb(20 184 166 / 0.25)' : 'none',
-    '&:hover': { borderColor: 'rgb(203 213 225)' },
-    fontSize: '0.875rem',
-  }),
-  valueContainer: (base) => ({ ...base, padding: '2px 10px' }),
-  placeholder: (base) => ({ ...base, color: 'rgb(148 163 184)' }),
-  menu: (base) => ({ ...base, zIndex: 50, borderRadius: '0.5rem', overflow: 'hidden' }),
-  menuList: (base) => ({ ...base, padding: 4 }),
-  option: (base, state) => ({
-    ...base,
-    fontSize: '0.875rem',
-    borderRadius: '0.375rem',
-    backgroundColor: state.isSelected
-      ? 'rgb(79 70 229)'
-      : state.isFocused
-        ? 'rgb(240 253 250)'
-        : 'transparent',
-    color: state.isSelected ? 'white' : 'rgb(15 23 42)',
-  }),
-  singleValue: (base) => ({ ...base, color: 'rgb(15 23 42)' }),
-};
-
-export function DailyWagesPage() {
+export function DailyCashbookPage() {
   const { manager } = useOutletContext();
-  const [workers, setWorkers] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [entries, setEntries] = useState([]);
-  const [totalIncluded, setTotalIncluded] = useState(0);
-  const [totalAll, setTotalAll] = useState(0);
+  const [pemasukanIncluded, setPemasukanIncluded] = useState(0);
+  const [pengeluaranIncluded, setPengeluaranIncluded] = useState(0);
+  const [saldoIncluded, setSaldoIncluded] = useState(0);
+  const [pemasukanAll, setPemasukanAll] = useState(0);
+  const [pengeluaranAll, setPengeluaranAll] = useState(0);
+  const [saldoAll, setSaldoAll] = useState(0);
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState(() => currentMonthStartYmdLocal());
   const [to, setTo] = useState(() => todayYmdLocal());
-  const [workerFilter, setWorkerFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [form, setForm] = useState({
-    work_date: todayYmdLocal(),
-    worker_id: '',
-    jenis_pekerjaan: '',
+    entry_date: todayYmdLocal(),
+    category_code: '',
     amount: '',
+    note: '',
     included_in_total: true,
   });
   const [saving, setSaving] = useState(false);
 
-  const workerOptions = useMemo(
-    () =>
-      workers.map((w) => ({
-        value: String(w.id),
-        label: w.username,
-      })),
-    [workers]
+  const pemasukanCats = useMemo(
+    () => categories.filter((c) => c.flow === 'in'),
+    [categories]
   );
-
-  const workerFilterOptions = useMemo(
-    () => [{ value: '', label: 'Semua pekerja' }, ...workerOptions],
-    [workerOptions]
-  );
-
-  const formWorkerValue = useMemo(
-    () => workerOptions.find((o) => o.value === form.worker_id) ?? null,
-    [workerOptions, form.worker_id]
-  );
-
-  const filterWorkerValue = useMemo(
-    () => workerFilterOptions.find((o) => o.value === workerFilter) ?? workerFilterOptions[0],
-    [workerFilterOptions, workerFilter]
+  const pengeluaranCats = useMemo(
+    () => categories.filter((c) => c.flow === 'out'),
+    [categories]
   );
 
   const load = useCallback(async () => {
@@ -112,24 +71,32 @@ export function DailyWagesPage() {
       const q = new URLSearchParams();
       if (from) q.set('from', from);
       if (to) q.set('to', to);
-      if (workerFilter) q.set('worker_id', workerFilter);
-      const data = await api.get(`/daily-wages?${q.toString()}`);
+      if (categoryFilter) q.set('category_code', categoryFilter);
+      const data = await api.get(`/daily-cashbook?${q.toString()}`);
       setEntries(data.data || []);
-      setTotalIncluded(data.totalIncluded ?? 0);
-      setTotalAll(data.totalAll ?? 0);
+      setPemasukanIncluded(data.pemasukanIncluded ?? 0);
+      setPengeluaranIncluded(data.pengeluaranIncluded ?? 0);
+      setSaldoIncluded(data.saldoIncluded ?? 0);
+      setPemasukanAll(data.pemasukanAll ?? 0);
+      setPengeluaranAll(data.pengeluaranAll ?? 0);
+      setSaldoAll(data.saldoAll ?? 0);
     } catch (e) {
       toast.error(e.message);
     } finally {
       setLoading(false);
     }
-  }, [manager, from, to, workerFilter]);
+  }, [manager, from, to, categoryFilter]);
 
   useEffect(() => {
     if (!manager) return;
     (async () => {
       try {
-        const w = await api.get('/users/workers');
-        setWorkers(w);
+        const meta = await api.get('/daily-cashbook/meta');
+        const cats = meta.categories || [];
+        setCategories(cats);
+        setForm((f) =>
+          f.category_code || !cats.length ? f : { ...f, category_code: cats[0].code }
+        );
       } catch (e) {
         toast.error(e.message);
       }
@@ -142,28 +109,28 @@ export function DailyWagesPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.work_date?.trim()) {
+    if (!form.entry_date?.trim()) {
       toast.error('Tanggal wajib diisi');
       return;
     }
-    if (!form.worker_id || !form.amount) {
-      toast.error('Pekerja dan nominal wajib');
+    if (!form.category_code || !form.amount) {
+      toast.error('Kategori dan nominal wajib');
       return;
     }
     setSaving(true);
     try {
-      await api.post('/daily-wages', {
-        work_date: form.work_date,
-        worker_id: Number(form.worker_id),
-        jenis_pekerjaan: form.jenis_pekerjaan,
+      await api.post('/daily-cashbook', {
+        entry_date: form.entry_date,
+        category_code: form.category_code,
         amount: Number(form.amount),
+        note: form.note || null,
         included_in_total: form.included_in_total,
       });
       toast.success('Entri tersimpan');
       setForm((f) => ({
         ...f,
-        jenis_pekerjaan: '',
         amount: '',
+        note: '',
       }));
       await load();
     } catch (err) {
@@ -175,7 +142,7 @@ export function DailyWagesPage() {
 
   async function toggleIncluded(row) {
     try {
-      await api.patch(`/daily-wages/${row.id}`, {
+      await api.patch(`/daily-cashbook/${row.id}`, {
         included_in_total: !row.included_in_total,
       });
       await load();
@@ -187,7 +154,7 @@ export function DailyWagesPage() {
   async function removeRow(id) {
     if (!confirm('Hapus entri ini?')) return;
     try {
-      await api.delete(`/daily-wages/${id}`);
+      await api.delete(`/daily-cashbook/${id}`);
       toast.success('Dihapus');
       await load();
     } catch (e) {
@@ -202,9 +169,10 @@ export function DailyWagesPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-batik-ink">Gaji harian pegawai</h1>
+        <h1 className="text-2xl font-bold text-batik-ink">Kas harian</h1>
         <p className="text-sm text-batik-indigo/70">
-          Catat pekerjaan per hari, centang masuk total, lihat ringkasan di bawah.
+          Catat pemasukan dan pengeluaran per kategori (mirip kalkulator HPP), simpan per tanggal,
+          lalu ringkas dengan filter dan daftar.
         </p>
       </div>
 
@@ -214,44 +182,52 @@ export function DailyWagesPage() {
       >
         <h2 className="text-lg font-semibold text-batik-ink">Entri baru</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <WageDatePicker
+          <CashDatePicker
             label="Tanggal"
             labelClassName="text-xs font-medium text-slate-600"
-            inputId="daily-wage-work-date"
-            valueYmd={form.work_date}
-            onChangeYmd={(v) => setForm((f) => ({ ...f, work_date: v }))}
+            inputId="cash-entry-date"
+            valueYmd={form.entry_date}
+            onChangeYmd={(v) => setForm((f) => ({ ...f, entry_date: v }))}
           />
-          <div className="min-w-0">
-            <label className="text-xs font-medium text-slate-600" htmlFor="daily-wage-worker">
-              Nama pekerja
+          <div className="min-w-0 sm:col-span-2 lg:col-span-3">
+            <label className="text-xs font-medium text-slate-600" htmlFor="cash-category">
+              Kategori
             </label>
-            <Select
-              inputId="daily-wage-worker"
-              instanceId="daily-wage-worker"
-              className="mt-1"
-              classNamePrefix="rs-worker"
-              options={workerOptions}
-              value={formWorkerValue}
-              onChange={(opt) =>
-                setForm((f) => ({ ...f, worker_id: opt ? opt.value : '' }))
-              }
-              placeholder="Pilih karyawan…"
-              isClearable
-              isSearchable
-              noOptionsMessage={() => 'Tidak ada karyawan'}
-              styles={workerSelectStyles}
-              menuPlacement="auto"
-              menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-              menuPosition="fixed"
-            />
+            <select
+              id="cash-category"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={form.category_code}
+              onChange={(e) => setForm((f) => ({ ...f, category_code: e.target.value }))}
+            >
+              {categories.length === 0 ? (
+                <option value="">Memuat kategori…</option>
+              ) : (
+                <>
+                  <optgroup label="Pemasukan">
+                    {pemasukanCats.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Pengeluaran / gaji">
+                    {pengeluaranCats.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                </>
+              )}
+            </select>
           </div>
-          <div className="sm:col-span-2 lg:col-span-2">
-            <label className="text-xs font-medium text-slate-600">Jenis pekerjaan</label>
+          <div className="sm:col-span-2 lg:col-span-4">
+            <label className="text-xs font-medium text-slate-600">Catatan (opsional)</label>
             <input
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              value={form.jenis_pekerjaan}
-              onChange={(e) => setForm((f) => ({ ...f, jenis_pekerjaan: e.target.value }))}
-              placeholder="Contoh: pewarnaan, ngelem, finishing"
+              value={form.note}
+              onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="Mis. shift, referensi bon…"
             />
           </div>
         </div>
@@ -295,11 +271,11 @@ export function DailyWagesPage() {
                 setForm((f) => ({ ...f, included_in_total: e.target.checked }))
               }
             />
-            Masukkan ke total (centang)
+            Hitung ke saldo (dicentang)
           </label>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !categories.length}
             className="rounded-xl bg-batik-indigo px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {saving ? 'Menyimpan…' : 'Simpan entri'}
@@ -308,58 +284,85 @@ export function DailyWagesPage() {
       </form>
 
       <section className="rounded-2xl border border-batik-teal/15 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-batik-ink">Filter & daftar</h2>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3 md:items-end">
-          <WageDatePicker
+        <h2 className="text-lg font-semibold text-batik-ink">Filter & ringkasan</h2>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
+          <CashDatePicker
             label="Dari"
             labelClassName="text-xs text-slate-500"
-            inputId="daily-wage-filter-from"
+            inputId="cash-filter-from"
             valueYmd={from}
             onChangeYmd={setFrom}
             maxDate={parseYmd(to) ?? undefined}
           />
-          <WageDatePicker
+          <CashDatePicker
             label="Sampai"
             labelClassName="text-xs text-slate-500"
-            inputId="daily-wage-filter-to"
+            inputId="cash-filter-to"
             valueYmd={to}
             onChangeYmd={setTo}
             minDate={parseYmd(from) ?? undefined}
           />
-          <div className="min-w-0">
-            <label className="text-xs text-slate-500" htmlFor="daily-wage-filter-worker">
-              Pekerja
+          <div className="md:col-span-2">
+            <label className="text-xs text-slate-500" htmlFor="cash-filter-cat">
+              Kategori (filter)
             </label>
-            <Select
-              inputId="daily-wage-filter-worker"
-              instanceId="daily-wage-filter-worker"
-              className="mt-1"
-              classNamePrefix="rs-worker-filter"
-              options={workerFilterOptions}
-              value={filterWorkerValue}
-              onChange={(opt) => setWorkerFilter(opt ? opt.value : '')}
-              isSearchable
-              noOptionsMessage={() => 'Tidak ada'}
-              styles={workerSelectStyles}
-              menuPlacement="auto"
-              menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-              menuPosition="fixed"
-            />
+            <select
+              id="cash-filter-cat"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="">Semua kategori</option>
+              <optgroup label="Pemasukan">
+                {pemasukanCats.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Pengeluaran / gaji">
+                {pengeluaranCats.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-teal-800/80">
-              Total (hanya yang dicentang)
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-900/75">
+              Pemasukan (dicentang)
             </p>
-            <p className="mt-1 text-2xl font-bold text-teal-900">{formatIdr(totalIncluded)}</p>
+            <p className="mt-1 text-xl font-bold text-emerald-900">{formatIdr(pemasukanIncluded)}</p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
-              Total semua entri (filter)
+          <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-amber-900/75">
+              Pengeluaran (dicentang)
             </p>
-            <p className="mt-1 text-2xl font-bold text-slate-800">{formatIdr(totalAll)}</p>
+            <p className="mt-1 text-xl font-bold text-amber-900">{formatIdr(pengeluaranIncluded)}</p>
+          </div>
+          <div className="rounded-xl border border-batik-teal/25 bg-teal-50/60 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-teal-900/80">Saldo (dicentang)</p>
+            <p className="mt-1 text-xl font-bold text-teal-950">{formatIdr(saldoIncluded)}</p>
+            <p className="mt-1 text-[11px] text-teal-900/70">Pemasukan − pengeluaran</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+            <p className="text-[11px] font-medium uppercase text-slate-500">Semua pemasukan (filter)</p>
+            <p className="text-lg font-semibold text-slate-800">{formatIdr(pemasukanAll)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+            <p className="text-[11px] font-medium uppercase text-slate-500">Semua pengeluaran (filter)</p>
+            <p className="text-lg font-semibold text-slate-800">{formatIdr(pengeluaranAll)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+            <p className="text-[11px] font-medium uppercase text-slate-500">Saldo semua entri (filter)</p>
+            <p className="text-lg font-semibold text-slate-800">{formatIdr(saldoAll)}</p>
           </div>
         </div>
 
@@ -373,19 +376,33 @@ export function DailyWagesPage() {
               <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Tgl</th>
-                  <th className="px-3 py-2">Pekerja</th>
-                  <th className="px-3 py-2">Jenis</th>
+                  <th className="px-3 py-2">Kategori</th>
+                  <th className="px-3 py-2">Arah</th>
+                  <th className="px-3 py-2">Catatan</th>
                   <th className="px-3 py-2">Nominal</th>
-                  <th className="px-3 py-2">Total</th>
+                  <th className="px-3 py-2">Hitung</th>
                   <th className="px-3 py-2 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {entries.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50/80">
-                    <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.work_date)}</td>
-                    <td className="px-3 py-2">{row.worker_username}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.jenis_pekerjaan || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.entry_date)}</td>
+                    <td className="px-3 py-2">{row.category_label}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                          row.flow_type === 'in'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-900'
+                        }`}
+                      >
+                        {row.flow_type === 'in' ? 'Masuk' : 'Keluar'}
+                      </span>
+                    </td>
+                    <td className="max-w-[10rem] truncate px-3 py-2 text-slate-600">
+                      {row.note?.trim() || '—'}
+                    </td>
                     <td className="px-3 py-2 font-medium">{formatIdr(row.amount)}</td>
                     <td className="px-3 py-2">
                       <label className="inline-flex cursor-pointer items-center gap-2 text-slate-700">
@@ -418,7 +435,7 @@ export function DailyWagesPage() {
   );
 }
 
-function WageDatePicker({
+function CashDatePicker({
   label,
   labelClassName,
   inputId,

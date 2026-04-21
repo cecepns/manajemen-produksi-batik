@@ -32,8 +32,15 @@ PUT    /workflow-steps/:stepId
 
 DELETE /workflow-steps/:stepId   (owner, supervisor)
 
-GET    /my-tasks                 Query: page, limit (maks 10), search (nama pemesan / nama tahap / id pesanan)
+GET    /my-tasks                 Query: page, limit (maks 10), search
+       Worker: hanya step dengan assigned_worker_id = user. Owner/supervisor: semua step.
        Response: { data, total, page, limit, totalPages }
+
+GET    /daily-cashbook/meta      (owner, supervisor) — daftar kategori pemasukan/pengeluaran
+GET    /daily-cashbook           Query: from, to, category_code? — kas harian + ringkasan saldo
+POST   /daily-cashbook           Body: { entry_date, category_code, amount, note?, included_in_total? }
+PATCH  /daily-cashbook/:id       Body: { included_in_total }
+DELETE /daily-cashbook/:id
 
 GET    /dashboard/summary
 

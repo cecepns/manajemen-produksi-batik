@@ -104,9 +104,9 @@ export function MainLayout() {
               </NavLink>
             )}
             {manager && (
-              <NavLink to={ROUTES.dailyWages} className={linkClass} onClick={closeMobileMenu}>
+              <NavLink to={ROUTES.dailyCashbook} className={linkClass} onClick={closeMobileMenu}>
                 <Wallet className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
-                <span>Gaji harian</span>
+                <span>Kas harian</span>
               </NavLink>
             )}
             {owner && (

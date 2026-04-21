@@ -85,7 +85,9 @@ export function MyTasksPage() {
       <div>
         <h1 className="text-2xl font-bold text-batik-ink">Tugas produksi</h1>
         <p className="text-sm text-batik-indigo/70">
-          Semua tahap produksi terlihat untuk referensi tim. Ubah status hanya untuk tugas Anda.
+          {manager
+            ? 'Semua tahap produksi (tim). Supervisor/owner dapat mengubah penugasan dan status.'
+            : 'Hanya tahap yang ditugaskan ke akun Anda. Ubah status dan cuaca untuk tugas Anda saja.'}
         </p>
       </div>
 

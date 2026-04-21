@@ -6,6 +6,6 @@ export const ROUTES = {
   orderDetail: (id) => `/pesanan/${id}`,
   myTasks: '/tugas-saya',
   hppCalculator: '/kalkulator-hpp',
-  dailyWages: '/gaji-harian',
+  dailyCashbook: '/kas-harian',
   adminUsers: '/admin/pengguna',
 };
