@@ -63,4 +63,25 @@ export const api = {
   put: (path, body, opts) => apiRequest('PUT', path, { ...opts, body }),
   patch: (path, body, opts) => apiRequest('PATCH', path, { ...opts, body }),
   delete: (path, opts) => apiRequest('DELETE', path, opts),
+  download: async (path, opts = {}) => {
+    const headers = {};
+    const auth = opts.token ?? localStorage.getItem('token');
+    if (auth) headers.Authorization = `Bearer ${auth}`;
+    const res = await fetch(buildUrl(path), {
+      method: 'GET',
+      headers,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      const msg = typeof data === 'object' && data?.message ? data.message : res.statusText;
+      throw new Error(msg || 'Permintaan gagal');
+    }
+    return res.blob();
+  },
 };

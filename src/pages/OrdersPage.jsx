@@ -20,7 +20,7 @@ import { confirmWithToast } from '../utils/toastConfirm';
 import { compressOrderPhoto } from '../utils/compressOrderPhoto';
 import { api } from '../services/api';
 import { ROUTES } from '../constants/routes';
-import { formatDate } from '../utils/formatDate';
+import { formatDate, toYmdLocal } from '../utils/formatDate';
 import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('id', localeId);
@@ -107,6 +107,8 @@ export function OrdersPage() {
   const [compressingFoto, setCompressingFoto] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraVideoReady, setCameraVideoReady] = useState(false);
+  const [reportMonth, setReportMonth] = useState(new Date());
+  const [downloadingReport, setDownloadingReport] = useState(false);
   const cameraStreamRef = useRef(null);
   const cameraVideoRef = useRef(null);
 
@@ -276,8 +278,8 @@ export function OrdersPage() {
         nama_usaha: data.nama_usaha?.trim() ? data.nama_usaha : 'Batik Binar',
         nama_pemesan: data.nama_pemesan ?? '',
         nomor_telepon_pelanggan: data.nomor_telepon_pelanggan ?? '',
-        tanggal_pesanan: data.tanggal_pesanan?.slice?.(0, 10) ?? data.tanggal_pesanan ?? '',
-        deadline: data.deadline?.slice?.(0, 10) ?? data.deadline ?? '',
+        tanggal_pesanan: toYmdLocal(data.tanggal_pesanan) || '',
+        deadline: toYmdLocal(data.deadline) || '',
         jumlah: data.jumlah ?? 1,
         penanggung_jawab: data.penanggung_jawab ?? '',
         jenis_bahan: data.jenis_bahan ?? '',
@@ -485,6 +487,28 @@ export function OrdersPage() {
     }
   }
 
+  async function downloadMonthlyReportCsv() {
+    if (downloadingReport) return;
+    setDownloadingReport(true);
+    try {
+      const month = format(reportMonth, 'yyyy-MM');
+      const blob = await api.download(`/orders/report.csv?month=${encodeURIComponent(month)}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laporan-pesanan-${month}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Laporan CSV berhasil diunduh');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setDownloadingReport(false);
+    }
+  }
+
   const startItem = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const endItem = Math.min(page * PAGE_SIZE, total);
 
@@ -500,6 +524,29 @@ export function OrdersPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {manager && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
+              <DatePicker
+                selected={reportMonth}
+                onChange={(d) => {
+                  if (d) setReportMonth(d);
+                }}
+                showMonthYearPicker
+                dateFormat="MMMM yyyy"
+                locale="id"
+                placeholderText="Pilih bulan"
+                className="w-40 rounded-lg border border-slate-200 px-3 py-2 text-sm text-batik-ink outline-none ring-batik-teal/30 focus:ring-2"
+              />
+              <button
+                type="button"
+                onClick={downloadMonthlyReportCsv}
+                disabled={downloadingReport}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                {downloadingReport ? 'Mengunduh…' : 'Unduh CSV'}
+              </button>
+            </div>
+          )}
           {manager && (
             <button
               type="button"

@@ -95,6 +95,25 @@ function isManager(role) {
   return role === 'owner' || role === 'supervisor';
 }
 
+function csvEscape(val) {
+  const raw = val == null ? '' : String(val);
+  return `"${raw.replace(/"/g, '""')}"`;
+}
+
+function toYmd(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(val).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return s;
+}
+
 async function canAccessOrder(user, orderId) {
   if (isManager(user.role)) return true;
   const [rows] = await pool.query(
@@ -481,6 +500,89 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.get('/api/orders/report.csv', authMiddleware, async (req, res) => {
+  try {
+    const month = String(req.query.month || '').trim();
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      return res.status(400).json({ message: 'Parameter month wajib format YYYY-MM' });
+    }
+
+    const startDate = `${month}-01`;
+    const baseSelect = `SELECT o.id, o.nama_usaha, o.nama_pemesan, o.nomor_telepon_pelanggan,
+                               o.tanggal_pesanan, o.deadline, o.jumlah, o.penanggung_jawab,
+                               o.jenis_bahan, o.ukuran_meter, o.ukuran_jahit, o.keterangan
+                          FROM orders o`;
+
+    let rows;
+    if (isManager(req.user.role)) {
+      [rows] = await pool.query(
+        `${baseSelect}
+          WHERE o.tanggal_pesanan >= ?
+            AND o.tanggal_pesanan < DATE_ADD(?, INTERVAL 1 MONTH)
+          ORDER BY o.tanggal_pesanan ASC, o.id ASC`,
+        [startDate, startDate]
+      );
+    } else {
+      [rows] = await pool.query(
+        `${baseSelect}
+          INNER JOIN (
+            SELECT DISTINCT order_id
+              FROM workflow_steps
+             WHERE assigned_worker_id = ?
+          ) own ON own.order_id = o.id
+          WHERE o.tanggal_pesanan >= ?
+            AND o.tanggal_pesanan < DATE_ADD(?, INTERVAL 1 MONTH)
+          ORDER BY o.tanggal_pesanan ASC, o.id ASC`,
+        [Number(req.user.sub), startDate, startDate]
+      );
+    }
+
+    const headers = [
+      'id_pesanan',
+      'nama_usaha',
+      'nama_pemesan',
+      'nomor_telepon_pelanggan',
+      'tanggal_pesanan',
+      'deadline',
+      'jumlah',
+      'penanggung_jawab',
+      'jenis_bahan',
+      'ukuran_meter',
+      'ukuran_jahit',
+      'keterangan',
+    ];
+    const lines = [headers.map(csvEscape).join(',')];
+    for (const row of rows) {
+      lines.push(
+        [
+          row.id,
+          row.nama_usaha,
+          row.nama_pemesan,
+          row.nomor_telepon_pelanggan,
+          toYmd(row.tanggal_pesanan),
+          toYmd(row.deadline),
+          row.jumlah,
+          row.penanggung_jawab,
+          row.jenis_bahan,
+          row.ukuran_meter,
+          row.ukuran_jahit,
+          row.keterangan,
+        ]
+          .map(csvEscape)
+          .join(',')
+      );
+    }
+
+    const filename = `laporan-pesanan-${month}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(`\uFEFF${lines.join('\n')}`);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
   }
 });
 

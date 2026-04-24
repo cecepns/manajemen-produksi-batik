@@ -4,7 +4,7 @@ import { Pencil, Trash2, X, ImagePlus } from 'lucide-react';
 import { api, assetUrl } from '../services/api';
 import { ROUTES } from '../constants/routes';
 import { ROLES } from '../constants/roles';
-import { formatDate, formatDateTime } from '../utils/formatDate';
+import { formatDate, formatDateTime, toYmdLocal } from '../utils/formatDate';
 import { formatIdr } from '../utils/formatMoney';
 import { WorkflowTimeline } from '../components/WorkflowTimeline';
 import { StatusBadge } from '../components/StatusBadge';
@@ -39,8 +39,8 @@ export function OrderDetailPage() {
         nama_usaha: data.nama_usaha?.trim() ? data.nama_usaha : 'Batik Binar',
         nama_pemesan: data.nama_pemesan,
         nomor_telepon_pelanggan: data.nomor_telepon_pelanggan ?? '',
-        tanggal_pesanan: data.tanggal_pesanan?.slice?.(0, 10) ?? data.tanggal_pesanan,
-        deadline: data.deadline?.slice?.(0, 10) ?? data.deadline,
+        tanggal_pesanan: toYmdLocal(data.tanggal_pesanan),
+        deadline: toYmdLocal(data.deadline),
         jumlah: data.jumlah,
         penanggung_jawab: data.penanggung_jawab,
         jenis_bahan: data.jenis_bahan ?? '',
