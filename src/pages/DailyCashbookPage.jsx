@@ -7,7 +7,7 @@ import { toast } from 'react-toastify';
 import { Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { formatIdr } from '../utils/formatMoney';
+import { formatIdr, normalizeIdrTyping, parseIdrInput } from '../utils/formatMoney';
 import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('id', localeId);
@@ -29,8 +29,6 @@ function todayYmdLocal() {
 function currentMonthStartYmdLocal() {
   return `${format(new Date(), 'yyyy-MM')}-01`;
 }
-
-const PRESET_AMOUNTS = [1700, 5000, 7500, 10000, 15000, 17000, 20000, 25000, 50000];
 
 export function DailyCashbookPage() {
   const { manager } = useOutletContext();
@@ -113,8 +111,9 @@ export function DailyCashbookPage() {
       toast.error('Tanggal wajib diisi');
       return;
     }
-    if (!form.category_code || !form.amount) {
-      toast.error('Kategori dan nominal wajib');
+    const amountNum = parseIdrInput(form.amount);
+    if (!form.category_code || !Number.isFinite(amountNum) || amountNum < 0) {
+      toast.error('Kategori dan nominal wajib (nominal angka valid)');
       return;
     }
     setSaving(true);
@@ -122,7 +121,7 @@ export function DailyCashbookPage() {
       await api.post('/daily-cashbook', {
         entry_date: form.entry_date,
         category_code: form.category_code,
-        amount: Number(form.amount),
+        amount: amountNum,
         note: form.note || null,
         included_in_total: form.included_in_total,
       });
@@ -210,7 +209,7 @@ export function DailyCashbookPage() {
                       </option>
                     ))}
                   </optgroup>
-                  <optgroup label="Pengeluaran / gaji">
+                  <optgroup label="Pengeluaran">
                     {pengeluaranCats.map((c) => (
                       <option key={c.code} value={c.code}>
                         {c.label}
@@ -231,37 +230,26 @@ export function DailyCashbookPage() {
             />
           </div>
         </div>
-        <div className="mt-4">
-          <label className="text-xs font-medium text-slate-600">Nominal cepat</label>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {PRESET_AMOUNTS.map((a) => (
-              <button
-                key={a}
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, amount: String(a) }))}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                  Number(form.amount) === a
-                    ? 'border-batik-teal bg-teal-50 text-batik-teal'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-batik-teal/40'
-                }`}
-              >
-                {formatIdr(a)}
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="mt-4 flex flex-wrap items-end gap-4">
           <div className="min-w-[10rem] flex-1">
-            <label className="text-xs font-medium text-slate-600">Nominal (manual)</label>
+            <label className="text-xs font-medium text-slate-600" htmlFor="cash-amount">
+              Nominal (manual)
+            </label>
             <input
-              type="number"
-              min={0}
-              step={100}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              id="cash-amount"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm tabular-nums"
               value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, amount: normalizeIdrTyping(e.target.value) }))
+              }
               placeholder="0"
             />
+            <p className="mt-1 text-[11px] text-slate-500">
+              Format rupiah: titik pemisah ribuan, koma untuk desimal (contoh: 10.000 atau 10.000,50).
+            </p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-slate-700">
             <input
@@ -320,7 +308,7 @@ export function DailyCashbookPage() {
                   </option>
                 ))}
               </optgroup>
-              <optgroup label="Pengeluaran / gaji">
+              <optgroup label="Pengeluaran">
                 {pengeluaranCats.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.label}

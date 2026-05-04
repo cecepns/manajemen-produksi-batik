@@ -1189,16 +1189,8 @@ app.get('/api/my-tasks', authMiddleware, async (req, res) => {
 const CASHBOOK_CATEGORIES = [
   { code: 'pemasukan_utama', label: 'Pemasukan', flow: 'in' },
   { code: 'pemasukan_lain', label: 'Pemasukan lain', flow: 'in' },
-  { code: 'gaji_pegawai_cap', label: 'Gaji pegawai cap', flow: 'out' },
-  { code: 'gaji_pegawai_warna', label: 'Gaji pegawai warna', flow: 'out' },
-  { code: 'gaji_pegawai_lorod', label: 'Gaji pegawai lorod', flow: 'out' },
-  { code: 'gaji_pegawai_pembatik_pr', label: 'Gaji pegawai pembatik PR', flow: 'out' },
-  { code: 'gaji_lain_a', label: 'Gaji lain A', flow: 'out' },
-  { code: 'gaji_lain_b', label: 'Gaji lain B', flow: 'out' },
-  { code: 'gaji_lain_c', label: 'Gaji lain C', flow: 'out' },
-  { code: 'pengeluaran_a', label: 'Pengeluaran A', flow: 'out' },
-  { code: 'pengeluaran_b', label: 'Pengeluaran B', flow: 'out' },
-  { code: 'pengeluaran_c', label: 'Pengeluaran C', flow: 'out' },
+  { code: 'gaji_pegawai_laki', label: 'Gaji pegawai laki laki', flow: 'out' },
+  { code: 'gaji_pegawai_perempuan', label: 'Gaji pegawai perempuan', flow: 'out' },
   { code: 'pengeluaran_lain', label: 'Pengeluaran lain', flow: 'out' },
 ];
 
@@ -1374,6 +1366,237 @@ app.delete(
     }
   }
 );
+
+// --- Produk baru (catatan berbasis foto; cepat simpan, edit teks belakangan) ---
+const uploadNewProductPhotos = multer({
+  storage,
+  limits: { files: 3, fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype);
+    cb(ok ? null : new Error('Hanya gambar (jpeg, png, webp, gif)'), ok);
+  },
+}).fields([
+  { name: 'foto1', maxCount: 1 },
+  { name: 'foto2', maxCount: 1 },
+  { name: 'foto3', maxCount: 1 },
+]);
+
+function unlinkUploadByUrl(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== 'string') return;
+  const file = path.basename(imageUrl);
+  if (!file || file.includes('..')) return;
+  const fp = path.join(UPLOAD_DIR, file);
+  try {
+    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+  } catch {
+    /* ignore */
+  }
+}
+
+function newProductRowOut(row) {
+  return row;
+}
+
+function canEditNewProduct(user, row) {
+  if (!user || !row) return false;
+  if (isManager(user.role)) return true;
+  return Number(user.sub) === Number(row.created_by);
+}
+
+app.get('/api/new-products', authMiddleware, async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT n.*, u.username AS created_by_username
+       FROM new_product_records n
+       JOIN users u ON u.id = n.created_by
+       ORDER BY n.id DESC`
+    );
+    res.json(rows.map(newProductRowOut));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.post('/api/new-products', authMiddleware, uploadNewProductPhotos, async (req, res) => {
+  const files = req.files || {};
+  const f1 = files.foto1?.[0];
+  const f2 = files.foto2?.[0];
+  const f3 = files.foto3?.[0];
+  const cleanup = () => {
+    for (const f of [f1, f2, f3]) {
+      if (f?.filename) unlinkUploadByUrl(`/uploads/${f.filename}`);
+    }
+  };
+  try {
+    if (!f1) {
+      cleanup();
+      return res.status(400).json({ message: 'Foto 1 (utama) wajib diisi' });
+    }
+    const b = req.body || {};
+    const pick = (k, max) => {
+      const v = b[k];
+      if (v == null) return null;
+      const t = String(v).trim();
+      return t ? t.slice(0, max) : null;
+    };
+    const textLong = (k) => {
+      const v = b[k];
+      if (v == null) return null;
+      const t = String(v).trim();
+      return t ? t.slice(0, 8000) : null;
+    };
+    const ymd = String(b.tanggal_pembuatan || '').trim();
+    const tanggalPembuatan = /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null;
+    let jumlah = null;
+    if (b.jumlah != null && String(b.jumlah).trim() !== '') {
+      const j = Number(b.jumlah);
+      jumlah = Number.isFinite(j) && j >= 0 ? Math.min(Math.floor(j), 2147483647) : null;
+    }
+
+    const foto1Url = `/uploads/${f1.filename}`;
+    const foto2Url = f2 ? `/uploads/${f2.filename}` : null;
+    const foto3Url = f3 ? `/uploads/${f3.filename}` : null;
+
+    const [r] = await pool.query(
+      `INSERT INTO new_product_records (
+        created_by, nama_motif, tanggal_pembuatan, jumlah, jenis_kain, ukuran_kain, ukuran_jahit,
+        model_fashion, resep_instruksi, foto1_keterangan, foto1_url, foto2_url, foto3_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.sub,
+        pick('nama_motif', 255),
+        tanggalPembuatan,
+        jumlah,
+        pick('jenis_kain', 255),
+        pick('ukuran_kain', 255),
+        pick('ukuran_jahit', 255),
+        pick('model_fashion', 255),
+        textLong('resep_instruksi'),
+        pick('foto1_keterangan', 512),
+        foto1Url,
+        foto2Url,
+        foto3Url,
+      ]
+    );
+    const [rows] = await pool.query(
+      `SELECT n.*, u.username AS created_by_username
+       FROM new_product_records n
+       JOIN users u ON u.id = n.created_by
+       WHERE n.id = ?`,
+      [r.insertId]
+    );
+    res.status(201).json(newProductRowOut(rows[0]));
+  } catch (e) {
+    console.error(e);
+    cleanup();
+    if (e.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(503).json({
+        message:
+          'Tabel produk baru belum ada. Jalankan migrasi SQL database_migration_produk_baru.sql lalu restart server.',
+      });
+    }
+    res.status(500).json({ message: e.message || 'Server error' });
+  }
+});
+
+app.patch('/api/new-products/:id', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: 'ID tidak valid' });
+    const [existing] = await pool.query('SELECT * FROM new_product_records WHERE id = ?', [id]);
+    const row = existing[0];
+    if (!row) return res.status(404).json({ message: 'Data tidak ditemukan' });
+    if (!canEditNewProduct(req.user, row)) {
+      return res.status(403).json({ message: 'Akses ditolak' });
+    }
+
+    const b = req.body || {};
+    const str = (k, max = 255) => {
+      if (!(k in b)) return undefined;
+      const v = b[k];
+      if (v == null) return null;
+      const t = String(v).trim();
+      return t ? t.slice(0, max) : null;
+    };
+    const textLong = (k) => {
+      if (!(k in b)) return undefined;
+      const v = b[k];
+      if (v == null) return null;
+      const t = String(v).trim();
+      return t ? t.slice(0, 8000) : null;
+    };
+
+    const updates = [];
+    const params = [];
+    const push = (col, val) => {
+      if (val !== undefined) {
+        updates.push(`${col} = ?`);
+        params.push(val);
+      }
+    };
+
+    push('nama_motif', str('nama_motif', 255));
+    if ('tanggal_pembuatan' in b) {
+      const ymd = String(b.tanggal_pembuatan || '').trim();
+      push('tanggal_pembuatan', /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null);
+    }
+    if ('jumlah' in b) {
+      const j = b.jumlah;
+      if (j == null || String(j).trim() === '') push('jumlah', null);
+      else {
+        const n = Number(j);
+        push(
+          'jumlah',
+          Number.isFinite(n) && n >= 0 ? Math.min(Math.floor(n), 2147483647) : null
+        );
+      }
+    }
+    push('jenis_kain', str('jenis_kain', 255));
+    push('ukuran_kain', str('ukuran_kain', 255));
+    push('ukuran_jahit', str('ukuran_jahit', 255));
+    push('model_fashion', str('model_fashion', 255));
+    push('resep_instruksi', textLong('resep_instruksi'));
+    push('foto1_keterangan', str('foto1_keterangan', 512));
+
+    if (!updates.length) {
+      return res.status(400).json({ message: 'Tidak ada perubahan' });
+    }
+    params.push(id);
+    await pool.query(
+      `UPDATE new_product_records SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+    const [rows] = await pool.query(
+      `SELECT n.*, u.username AS created_by_username
+       FROM new_product_records n
+       JOIN users u ON u.id = n.created_by
+       WHERE n.id = ?`,
+      [id]
+    );
+    res.json(newProductRowOut(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.delete('/api/new-products/:id', authMiddleware, requireRole('owner', 'supervisor'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [existing] = await pool.query('SELECT * FROM new_product_records WHERE id = ?', [id]);
+    const row = existing[0];
+    if (!row) return res.status(404).json({ message: 'Data tidak ditemukan' });
+    for (const u of [row.foto1_url, row.foto2_url, row.foto3_url]) {
+      unlinkUploadByUrl(u);
+    }
+    await pool.query('DELETE FROM new_product_records WHERE id = ?', [id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 // --- Dashboard ringkas ---
 app.get('/api/dashboard/summary', authMiddleware, async (req, res) => {

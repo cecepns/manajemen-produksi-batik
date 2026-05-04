@@ -11,6 +11,7 @@ import { OrderDetailPage } from '../pages/OrderDetailPage';
 import { MyTasksPage } from '../pages/MyTasksPage';
 import { HppCalculatorPage } from '../pages/HppCalculatorPage';
 import { DailyCashbookPage } from '../pages/DailyCashbookPage';
+import { NewProductsPage } from '../pages/NewProductsPage';
 import { UsersAdminPage } from '../pages/UsersAdminPage';
 import { ROUTES } from '../constants/routes';
 
@@ -53,6 +54,7 @@ export function AppRouter() {
           <Route path={ROUTES.myTasks} element={<MyTasksPage />} />
           <Route path={ROUTES.hppCalculator} element={<HppCalculatorPage />} />
           <Route path={ROUTES.dailyCashbook} element={<DailyCashbookPage />} />
+          <Route path={ROUTES.newProducts} element={<NewProductsPage />} />
           <Route path="/gaji-harian" element={<Navigate to={ROUTES.dailyCashbook} replace />} />
           <Route path={ROUTES.adminUsers} element={<UsersAdminPage />} />
         </Route>

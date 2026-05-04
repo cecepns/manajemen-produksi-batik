@@ -12,6 +12,7 @@ import {
   Calculator,
   Menu,
   X,
+  Camera,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../constants/routes';
@@ -96,6 +97,10 @@ export function MainLayout() {
             <NavLink to={ROUTES.myTasks} className={linkClass} onClick={closeMobileMenu}>
               <ListTodo className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
               <span>Tugas saya</span>
+            </NavLink>
+            <NavLink to={ROUTES.newProducts} className={linkClass} onClick={closeMobileMenu}>
+              <Camera className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+              <span>Produk baru</span>
             </NavLink>
             {manager && (
               <NavLink to={ROUTES.hppCalculator} className={linkClass} onClick={closeMobileMenu}>
