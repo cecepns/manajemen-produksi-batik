@@ -1,19 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Camera, Package, Pencil, Trash2 } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Package, Pencil, Search, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api, assetUrl } from '../services/api';
-import { formatDate, toYmdLocal } from '../utils/formatDate';
+import { formatDate } from '../utils/formatDate';
 import { compressOrderPhoto } from '../utils/compressOrderPhoto';
+
+const PAGE_SIZE = 10;
 
 const emptyCreateForm = {
   nama_motif: '',
-  tanggal_pembuatan: '',
-  jumlah: '',
-  jenis_kain: '',
-  ukuran_kain: '',
-  ukuran_jahit: '',
-  model_fashion: '',
   resep_instruksi: '',
   foto1_keterangan: '',
 };
@@ -34,6 +30,12 @@ export function NewProductsPage() {
   const [previewUrls, setPreviewUrls] = useState({ 1: '', 2: '', 3: '' });
   const previewUrlsRef = useRef(previewUrls);
 
+  const [page, setPage] = useState(1);
+  const [listQ, setListQ] = useState('');
+  const [qDraft, setQDraft] = useState('');
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
@@ -51,19 +53,34 @@ export function NewProductsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await api.get('/new-products');
-      setItems(Array.isArray(rows) ? rows : []);
+      const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+      if (listQ) qs.set('q', listQ);
+      const res = await api.get(`/new-products?${qs.toString()}`);
+      setItems(Array.isArray(res.data) ? res.data : []);
+      setTotal(Number(res.total) || 0);
+      setTotalPages(Math.max(1, Number(res.totalPages) || 1));
     } catch (e) {
       toast.error(e.message);
       setItems([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, listQ]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    setPage((p) => Math.max(1, Math.min(p, totalPages)));
+  }, [totalPages]);
+
+  function applySearch() {
+    setListQ(qDraft.trim());
+    setPage(1);
+  }
 
   function setSlotFile(slot, file) {
     if (!file) return;
@@ -100,12 +117,6 @@ export function NewProductsPage() {
         if (val != null && String(val).trim() !== '') fd.append(key, String(val).trim());
       };
       appendIf('nama_motif', form.nama_motif);
-      appendIf('tanggal_pembuatan', form.tanggal_pembuatan);
-      appendIf('jumlah', form.jumlah);
-      appendIf('jenis_kain', form.jenis_kain);
-      appendIf('ukuran_kain', form.ukuran_kain);
-      appendIf('ukuran_jahit', form.ukuran_jahit);
-      appendIf('model_fashion', form.model_fashion);
       appendIf('resep_instruksi', form.resep_instruksi);
       appendIf('foto1_keterangan', form.foto1_keterangan);
 
@@ -113,7 +124,9 @@ export function NewProductsPage() {
       toast.success('Produk baru tersimpan');
       setForm(emptyCreateForm);
       clearCreatePhotos();
-      await load();
+      setPage(1);
+      setListQ('');
+      setQDraft('');
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -125,12 +138,6 @@ export function NewProductsPage() {
     setEditingId(row.id);
     setEditForm({
       nama_motif: row.nama_motif ?? '',
-      tanggal_pembuatan: toYmdLocal(row.tanggal_pembuatan),
-      jumlah: row.jumlah != null ? String(row.jumlah) : '',
-      jenis_kain: row.jenis_kain ?? '',
-      ukuran_kain: row.ukuran_kain ?? '',
-      ukuran_jahit: row.ukuran_jahit ?? '',
-      model_fashion: row.model_fashion ?? '',
       resep_instruksi: row.resep_instruksi ?? '',
       foto1_keterangan: row.foto1_keterangan ?? '',
     });
@@ -143,25 +150,10 @@ export function NewProductsPage() {
 
   async function saveEdit() {
     if (!editingId || !editForm) return;
-    let jumlah = null;
-    if (editForm.jumlah.trim() !== '') {
-      const n = Number(editForm.jumlah);
-      if (!Number.isFinite(n) || n < 0) {
-        toast.error('Jumlah tidak valid');
-        return;
-      }
-      jumlah = Math.floor(n);
-    }
     setSaving(true);
     try {
       const body = {
         nama_motif: editForm.nama_motif.trim() || null,
-        tanggal_pembuatan: editForm.tanggal_pembuatan.trim() || null,
-        jumlah,
-        jenis_kain: editForm.jenis_kain.trim() || null,
-        ukuran_kain: editForm.ukuran_kain.trim() || null,
-        ukuran_jahit: editForm.ukuran_jahit.trim() || null,
-        model_fashion: editForm.model_fashion.trim() || null,
         resep_instruksi: editForm.resep_instruksi.trim() || null,
         foto1_keterangan: editForm.foto1_keterangan.trim() || null,
       };
@@ -196,8 +188,8 @@ export function NewProductsPage() {
       <div>
         <h1 className="text-2xl font-bold text-batik-ink">Produk baru</h1>
         <p className="text-sm text-batik-indigo/70">
-          Cepat ambil foto (kamera/galeri) lalu simpan. Isian teks boleh menyusul; owner/supervisor
-          dan pembuat bisa mengisi atau mengubah detail nanti.
+          Halaman ini untuk semua role yang sudah masuk. Fokus foto dulu; isian teks singkat (nama
+          motif, resep/instruksi, keterangan foto 1) boleh menyusul.
         </p>
       </div>
 
@@ -274,7 +266,7 @@ export function NewProductsPage() {
             ))}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="text-xs font-medium text-slate-600" htmlFor="np-nama">
                 Nama motif
@@ -284,79 +276,10 @@ export function NewProductsPage() {
                 className={textFieldClass}
                 value={form.nama_motif}
                 onChange={(e) => setForm((f) => ({ ...f, nama_motif: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600" htmlFor="np-tgl">
-                Tanggal pembuatan
-              </label>
-              <input
-                id="np-tgl"
-                type="date"
-                className={textFieldClass}
-                value={form.tanggal_pembuatan}
-                onChange={(e) => setForm((f) => ({ ...f, tanggal_pembuatan: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600" htmlFor="np-jml">
-                Jumlah
-              </label>
-              <input
-                id="np-jml"
-                type="number"
-                min={0}
-                step={1}
-                className={textFieldClass}
-                value={form.jumlah}
-                onChange={(e) => setForm((f) => ({ ...f, jumlah: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600" htmlFor="np-kain">
-                Jenis kain
-              </label>
-              <input
-                id="np-kain"
-                className={textFieldClass}
-                value={form.jenis_kain}
-                onChange={(e) => setForm((f) => ({ ...f, jenis_kain: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600" htmlFor="np-uk-kain">
-                Ukuran kain
-              </label>
-              <input
-                id="np-uk-kain"
-                className={textFieldClass}
-                value={form.ukuran_kain}
-                onChange={(e) => setForm((f) => ({ ...f, ukuran_kain: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-600" htmlFor="np-uk-jahit">
-                Ukuran jahit
-              </label>
-              <input
-                id="np-uk-jahit"
-                className={textFieldClass}
-                value={form.ukuran_jahit}
-                onChange={(e) => setForm((f) => ({ ...f, ukuran_jahit: e.target.value }))}
+                placeholder="Opsional"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-slate-600" htmlFor="np-model">
-                Model fashion
-              </label>
-              <input
-                id="np-model"
-                className={textFieldClass}
-                value={form.model_fashion}
-                onChange={(e) => setForm((f) => ({ ...f, model_fashion: e.target.value }))}
-              />
-            </div>
-            <div className="sm:col-span-2 lg:col-span-3">
               <label className="text-xs font-medium text-slate-600" htmlFor="np-resep">
                 Resep / instruksi
               </label>
@@ -366,6 +289,7 @@ export function NewProductsPage() {
                 className={textFieldClass}
                 value={form.resep_instruksi}
                 onChange={(e) => setForm((f) => ({ ...f, resep_instruksi: e.target.value }))}
+                placeholder="Opsional"
               />
             </div>
           </div>
@@ -383,14 +307,52 @@ export function NewProductsPage() {
       </form>
 
       <section className="rounded-2xl border border-batik-teal/15 bg-white p-6 shadow-sm">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-batik-ink">
-          <Package className="h-5 w-5 text-batik-teal" aria-hidden />
-          Daftar produk baru
-        </h2>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-batik-ink">
+            <Package className="h-5 w-5 text-batik-teal" aria-hidden />
+            Daftar produk baru
+          </h2>
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-md sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <label className="text-xs font-medium text-slate-600" htmlFor="np-search">
+                Cari
+              </label>
+              <input
+                id="np-search"
+                type="search"
+                className={textFieldClass}
+                value={qDraft}
+                onChange={(e) => setQDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    applySearch();
+                  }
+                }}
+                placeholder="Nama motif, keterangan, resep, atau pembuat…"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={applySearch}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:border-batik-teal/40"
+            >
+              <Search className="h-4 w-4 text-batik-teal" aria-hidden />
+              Cari
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-2 text-xs text-slate-500">
+          Menampilkan hingga {PAGE_SIZE} data per halaman ({total} total).
+        </p>
+
         {loading ? (
           <p className="mt-4 text-sm text-batik-indigo/60">Memuat…</p>
         ) : items.length === 0 ? (
-          <p className="mt-4 text-sm text-batik-indigo/60">Belum ada catatan.</p>
+          <p className="mt-4 text-sm text-batik-indigo/60">
+            {listQ ? 'Tidak ada hasil untuk pencarian ini.' : 'Belum ada catatan.'}
+          </p>
         ) : (
           <ul className="mt-4 space-y-6">
             {items.map((row) => (
@@ -410,14 +372,14 @@ export function NewProductsPage() {
                   </div>
                   <div className="flex gap-2">
                     {(manager || Number(user?.id) === Number(row.created_by)) && (
-                    <button
-                      type="button"
-                      onClick={() => openEdit(row)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-batik-teal/40"
-                    >
-                      <Pencil className="h-3.5 w-3.5" aria-hidden />
-                      Edit detail
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(row)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-batik-teal/40"
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        Edit detail
+                      </button>
                     )}
                     {manager && (
                       <button
@@ -466,49 +428,21 @@ export function NewProductsPage() {
                   )}
                 </div>
 
-                <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                  <div>
-                    <dt className="text-xs text-slate-500">Tanggal pembuatan</dt>
-                    <dd className="font-medium text-slate-800">
-                      {row.tanggal_pembuatan ? formatDate(row.tanggal_pembuatan) : '—'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Jumlah</dt>
-                    <dd className="font-medium text-slate-800">{row.jumlah ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Jenis kain</dt>
-                    <dd className="font-medium text-slate-800">{row.jenis_kain?.trim() || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Ukuran kain</dt>
-                    <dd className="font-medium text-slate-800">{row.ukuran_kain?.trim() || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Ukuran jahit</dt>
-                    <dd className="font-medium text-slate-800">{row.ukuran_jahit?.trim() || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Model fashion</dt>
-                    <dd className="font-medium text-slate-800">
-                      {row.model_fashion?.trim() || '—'}
-                    </dd>
-                  </div>
-                  <div className="sm:col-span-2 lg:col-span-3">
-                    <dt className="text-xs text-slate-500">Resep / instruksi</dt>
-                    <dd className="whitespace-pre-wrap text-slate-800">
-                      {row.resep_instruksi?.trim() || '—'}
-                    </dd>
-                  </div>
-                </dl>
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-slate-500">Resep / instruksi</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                    {row.resep_instruksi?.trim() || '—'}
+                  </p>
+                </div>
 
                 {editingId === row.id && editForm ? (
                   <div className="mt-4 rounded-xl border border-batik-teal/25 bg-white p-4">
                     <h3 className="text-sm font-semibold text-batik-ink">Edit detail</h3>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div className="sm:col-span-2">
-                        <label className="text-xs font-medium text-slate-600">Keterangan foto 1</label>
+                        <label className="text-xs font-medium text-slate-600">
+                          Keterangan foto 1
+                        </label>
                         <input
                           className={textFieldClass}
                           value={editForm.foto1_keterangan}
@@ -517,70 +451,13 @@ export function NewProductsPage() {
                           }
                         />
                       </div>
-                      <div>
+                      <div className="sm:col-span-2">
                         <label className="text-xs font-medium text-slate-600">Nama motif</label>
                         <input
                           className={textFieldClass}
                           value={editForm.nama_motif}
-                          onChange={(e) => setEditForm((f) => ({ ...f, nama_motif: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600">Tanggal pembuatan</label>
-                        <input
-                          type="date"
-                          className={textFieldClass}
-                          value={editForm.tanggal_pembuatan}
                           onChange={(e) =>
-                            setEditForm((f) => ({ ...f, tanggal_pembuatan: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600">Jumlah</label>
-                        <input
-                          type="number"
-                          min={0}
-                          className={textFieldClass}
-                          value={editForm.jumlah}
-                          onChange={(e) => setEditForm((f) => ({ ...f, jumlah: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600">Jenis kain</label>
-                        <input
-                          className={textFieldClass}
-                          value={editForm.jenis_kain}
-                          onChange={(e) => setEditForm((f) => ({ ...f, jenis_kain: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600">Ukuran kain</label>
-                        <input
-                          className={textFieldClass}
-                          value={editForm.ukuran_kain}
-                          onChange={(e) =>
-                            setEditForm((f) => ({ ...f, ukuran_kain: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600">Ukuran jahit</label>
-                        <input
-                          className={textFieldClass}
-                          value={editForm.ukuran_jahit}
-                          onChange={(e) =>
-                            setEditForm((f) => ({ ...f, ukuran_jahit: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="text-xs font-medium text-slate-600">Model fashion</label>
-                        <input
-                          className={textFieldClass}
-                          value={editForm.model_fashion}
-                          onChange={(e) =>
-                            setEditForm((f) => ({ ...f, model_fashion: e.target.value }))
+                            setEditForm((f) => ({ ...f, nama_motif: e.target.value }))
                           }
                         />
                       </div>
@@ -618,6 +495,34 @@ export function NewProductsPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {!loading && total > 0 && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <p className="text-xs text-slate-600">
+              Halaman {page} dari {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+                Sebelumnya
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Berikutnya
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          </div>
         )}
       </section>
     </div>

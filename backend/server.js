@@ -1367,7 +1367,8 @@ app.delete(
   }
 );
 
-// --- Produk baru (catatan berbasis foto; cepat simpan, edit teks belakangan) ---
+// --- Produk baru (catatan berbasis foto; cepat simpan, edit teks belakangan)
+// GET/POST/PATCH: semua role terautentikasi termasuk worker. DELETE: owner/supervisor saja. ---
 const uploadNewProductPhotos = multer({
   storage,
   limits: { files: 3, fileSize: 5 * 1024 * 1024 },
@@ -1403,15 +1404,59 @@ function canEditNewProduct(user, row) {
   return Number(user.sub) === Number(row.created_by);
 }
 
-app.get('/api/new-products', authMiddleware, async (_req, res) => {
+app.get('/api/new-products', authMiddleware, async (req, res) => {
   try {
+    const pageRaw = Number(req.query.page);
+    const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1;
+    const limitRaw = Number(req.query.limit);
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw >= 1 ? Math.min(10, Math.floor(limitRaw)) : 10;
+    const offset = (page - 1) * limit;
+
+    const qRaw = String(req.query.q ?? req.query.search ?? '').trim();
+    let searchClause = '';
+    const searchParams = [];
+    if (qRaw) {
+      const safe = qRaw.replace(/[%_\\]/g, ' ').trim();
+      if (safe) {
+        const pat = `%${safe}%`;
+        searchClause = `WHERE (
+          n.nama_motif LIKE ? OR
+          n.foto1_keterangan LIKE ? OR
+          n.resep_instruksi LIKE ? OR
+          u.username LIKE ?
+        )`;
+        searchParams.push(pat, pat, pat, pat);
+      }
+    }
+
+    const [[countRow]] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM new_product_records n
+       JOIN users u ON u.id = n.created_by
+       ${searchClause}`,
+      searchParams
+    );
+    const total = Number(countRow?.total) || 0;
+    const totalPages = total === 0 ? 1 : Math.ceil(total / limit);
+
     const [rows] = await pool.query(
       `SELECT n.*, u.username AS created_by_username
        FROM new_product_records n
        JOIN users u ON u.id = n.created_by
-       ORDER BY n.id DESC`
+       ${searchClause}
+       ORDER BY n.id DESC
+       LIMIT ? OFFSET ?`,
+      [...searchParams, limit, offset]
     );
-    res.json(rows.map(newProductRowOut));
+
+    res.json({
+      data: rows.map(newProductRowOut),
+      page,
+      limit,
+      total,
+      totalPages,
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Server error' });
@@ -1446,14 +1491,6 @@ app.post('/api/new-products', authMiddleware, uploadNewProductPhotos, async (req
       const t = String(v).trim();
       return t ? t.slice(0, 8000) : null;
     };
-    const ymd = String(b.tanggal_pembuatan || '').trim();
-    const tanggalPembuatan = /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null;
-    let jumlah = null;
-    if (b.jumlah != null && String(b.jumlah).trim() !== '') {
-      const j = Number(b.jumlah);
-      jumlah = Number.isFinite(j) && j >= 0 ? Math.min(Math.floor(j), 2147483647) : null;
-    }
-
     const foto1Url = `/uploads/${f1.filename}`;
     const foto2Url = f2 ? `/uploads/${f2.filename}` : null;
     const foto3Url = f3 ? `/uploads/${f3.filename}` : null;
@@ -1462,16 +1499,10 @@ app.post('/api/new-products', authMiddleware, uploadNewProductPhotos, async (req
       `INSERT INTO new_product_records (
         created_by, nama_motif, tanggal_pembuatan, jumlah, jenis_kain, ukuran_kain, ukuran_jahit,
         model_fashion, resep_instruksi, foto1_keterangan, foto1_url, foto2_url, foto3_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?)`,
       [
         req.user.sub,
         pick('nama_motif', 255),
-        tanggalPembuatan,
-        jumlah,
-        pick('jenis_kain', 255),
-        pick('ukuran_kain', 255),
-        pick('ukuran_jahit', 255),
-        pick('model_fashion', 255),
         textLong('resep_instruksi'),
         pick('foto1_keterangan', 512),
         foto1Url,
@@ -1537,25 +1568,6 @@ app.patch('/api/new-products/:id', authMiddleware, async (req, res) => {
     };
 
     push('nama_motif', str('nama_motif', 255));
-    if ('tanggal_pembuatan' in b) {
-      const ymd = String(b.tanggal_pembuatan || '').trim();
-      push('tanggal_pembuatan', /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null);
-    }
-    if ('jumlah' in b) {
-      const j = b.jumlah;
-      if (j == null || String(j).trim() === '') push('jumlah', null);
-      else {
-        const n = Number(j);
-        push(
-          'jumlah',
-          Number.isFinite(n) && n >= 0 ? Math.min(Math.floor(n), 2147483647) : null
-        );
-      }
-    }
-    push('jenis_kain', str('jenis_kain', 255));
-    push('ukuran_kain', str('ukuran_kain', 255));
-    push('ukuran_jahit', str('ukuran_jahit', 255));
-    push('model_fashion', str('model_fashion', 255));
     push('resep_instruksi', textLong('resep_instruksi'));
     push('foto1_keterangan', str('foto1_keterangan', 512));
 

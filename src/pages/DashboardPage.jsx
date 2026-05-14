@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ClipboardList,
   Sparkles,
+  Camera,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { ROUTES } from '../constants/routes';
@@ -127,6 +128,13 @@ export function DashboardPage() {
             >
               <ClipboardList className="h-4 w-4 text-batik-teal" aria-hidden />
               Tugas saya
+            </Link>
+            <Link
+              to={ROUTES.newProducts}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              <Camera className="h-4 w-4 text-batik-teal" aria-hidden />
+              Produk baru
             </Link>
           </div>
         </div>
