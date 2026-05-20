@@ -1,4 +1,4 @@
-const RAW = (import.meta.env.VITE_API_URL || 'https://api-inventory.isavralabel.com/manajemen-produksi-batik/api').replace(/\/$/, '');
+const RAW = (import.meta.env.VITE_API_URL || 'https://api.kingcreativestudio.my.id/manajemen-produksi-batik/api').replace(/\/$/, '');
 // const RAW = (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/$/, '');
 
 /** Origin server (tanpa /api) untuk file statis /uploads */
