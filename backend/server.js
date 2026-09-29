@@ -1610,6 +1610,297 @@ app.delete('/api/new-products/:id', authMiddleware, requireRole('owner', 'superv
   }
 });
 
+// --- Modul Investasi & Bagi Hasil Usaha ---
+function investmentRowOut(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    createdBy: row.created_by,
+    creatorUsername: row.creator_username || null,
+    periode: row.periode,
+    jenisUsaha: row.jenis_usaha,
+    hasilUsaha: Number(row.hasil_usaha) || 0,
+    totalModal: Number(row.total_modal) || 0,
+    status: row.status,
+    catatan: row.catatan || '',
+    totalInvestors: Number(row.total_investors) || 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function investorRowOut(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    investmentId: row.investment_id,
+    namaInvestor: row.nama_investor,
+    modalSerta: Number(row.modal_serta) || 0,
+    persentase: Number(row.persentase) || 0,
+    bagiHasil: Number(row.bagi_hasil) || 0,
+    keterangan: row.keterangan || '',
+    urutan: Number(row.urutan) || 0,
+    createdAt: row.created_at,
+  };
+}
+
+app.get(
+  '/api/investments',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    try {
+      const { search, status } = req.query || {};
+      const conds = [];
+      const params = [];
+
+      if (search && String(search).trim()) {
+        const q = `%${String(search).trim()}%`;
+        conds.push('(i.periode LIKE ? OR i.jenis_usaha LIKE ?)');
+        params.push(q, q);
+      }
+      if (status && String(status).trim()) {
+        conds.push('i.status = ?');
+        params.push(String(status).trim());
+      }
+
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+      const [rows] = await pool.query(
+        `SELECT i.*, u.username AS creator_username,
+          (SELECT COUNT(*) FROM investment_investors ii WHERE ii.investment_id = i.id) AS total_investors
+         FROM investments i
+         LEFT JOIN users u ON u.id = i.created_by
+         ${where}
+         ORDER BY i.created_at DESC, i.id DESC`,
+        params
+      );
+      res.json(rows.map(investmentRowOut));
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+app.get(
+  '/api/investments/:id',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!id) return res.status(400).json({ message: 'ID tidak valid' });
+
+      const [invRows] = await pool.query(
+        `SELECT i.*, u.username AS creator_username
+         FROM investments i
+         LEFT JOIN users u ON u.id = i.created_by
+         WHERE i.id = ?`,
+        [id]
+      );
+      if (!invRows[0]) return res.status(404).json({ message: 'Data investasi tidak ditemukan' });
+
+      const [investors] = await pool.query(
+        `SELECT * FROM investment_investors WHERE investment_id = ? ORDER BY urutan ASC, id ASC`,
+        [id]
+      );
+
+      const data = investmentRowOut(invRows[0]);
+      data.investors = investors.map(investorRowOut);
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
+app.post(
+  '/api/investments',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    const conn = await pool.getConnection();
+    try {
+      const { periode, jenis_usaha, hasil_usaha, status, catatan, investors } = req.body || {};
+      if (!periode || !String(periode).trim()) {
+        return res.status(400).json({ message: 'Periode wajib diisi' });
+      }
+      if (!jenis_usaha || !String(jenis_usaha).trim()) {
+        return res.status(400).json({ message: 'Jenis usaha wajib diisi' });
+      }
+
+      const hasilUsahaNum = Math.max(0, Number(hasil_usaha) || 0);
+      const invList = Array.isArray(investors) ? investors : [];
+
+      let totalModal = 0;
+      for (const item of invList) {
+        const m = Math.max(0, Number(item.modalSerta ?? item.modal_serta) || 0);
+        totalModal += m;
+      }
+
+      await conn.beginTransaction();
+
+      const [resInv] = await conn.query(
+        `INSERT INTO investments (created_by, periode, jenis_usaha, hasil_usaha, total_modal, status, catatan)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          req.user.sub,
+          String(periode).trim(),
+          String(jenis_usaha).trim(),
+          hasilUsahaNum,
+          totalModal,
+          status || 'selesai',
+          catatan ? String(catatan).trim() : null,
+        ]
+      );
+      const investmentId = resInv.insertId;
+
+      for (let i = 0; i < invList.length; i++) {
+        const item = invList[i];
+        const nama = String(item.namaInvestor ?? item.nama_investor ?? '').trim() || `Investor ${i + 1}`;
+        const modal = Math.max(0, Number(item.modalSerta ?? item.modal_serta) || 0);
+        const persentase = totalModal > 0 ? (modal / totalModal) * 100 : 0;
+        const bagiHasil = totalModal > 0 ? (modal / totalModal) * hasilUsahaNum : 0;
+        const ket = item.keterangan ? String(item.keterangan).trim() : null;
+
+        await conn.query(
+          `INSERT INTO investment_investors (investment_id, nama_investor, modal_serta, persentase, bagi_hasil, keterangan, urutan)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [investmentId, nama, modal, persentase, bagiHasil, ket, i]
+        );
+      }
+
+      await conn.commit();
+
+      const [savedInv] = await pool.query('SELECT * FROM investments WHERE id = ?', [investmentId]);
+      const [savedInvestors] = await pool.query(
+        'SELECT * FROM investment_investors WHERE investment_id = ? ORDER BY urutan ASC, id ASC',
+        [investmentId]
+      );
+
+      const out = investmentRowOut(savedInv[0]);
+      out.investors = savedInvestors.map(investorRowOut);
+      res.status(201).json(out);
+    } catch (e) {
+      await conn.rollback();
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  }
+);
+
+app.put(
+  '/api/investments/:id',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: 'ID tidak valid' });
+
+    const conn = await pool.getConnection();
+    try {
+      const { periode, jenis_usaha, hasil_usaha, status, catatan, investors } = req.body || {};
+      if (!periode || !String(periode).trim()) {
+        return res.status(400).json({ message: 'Periode wajib diisi' });
+      }
+      if (!jenis_usaha || !String(jenis_usaha).trim()) {
+        return res.status(400).json({ message: 'Jenis usaha wajib diisi' });
+      }
+
+      const hasilUsahaNum = Math.max(0, Number(hasil_usaha) || 0);
+      const invList = Array.isArray(investors) ? investors : [];
+
+      let totalModal = 0;
+      for (const item of invList) {
+        const m = Math.max(0, Number(item.modalSerta ?? item.modal_serta) || 0);
+        totalModal += m;
+      }
+
+      await conn.beginTransaction();
+
+      const [exist] = await conn.query('SELECT id FROM investments WHERE id = ?', [id]);
+      if (!exist[0]) {
+        await conn.rollback();
+        return res.status(404).json({ message: 'Data investasi tidak ditemukan' });
+      }
+
+      await conn.query(
+        `UPDATE investments
+         SET periode = ?, jenis_usaha = ?, hasil_usaha = ?, total_modal = ?, status = ?, catatan = ?
+         WHERE id = ?`,
+        [
+          String(periode).trim(),
+          String(jenis_usaha).trim(),
+          hasilUsahaNum,
+          totalModal,
+          status || 'selesai',
+          catatan ? String(catatan).trim() : null,
+          id,
+        ]
+      );
+
+      // Re-insert investors
+      await conn.query('DELETE FROM investment_investors WHERE investment_id = ?', [id]);
+      for (let i = 0; i < invList.length; i++) {
+        const item = invList[i];
+        const nama = String(item.namaInvestor ?? item.nama_investor ?? '').trim() || `Investor ${i + 1}`;
+        const modal = Math.max(0, Number(item.modalSerta ?? item.modal_serta) || 0);
+        const persentase = totalModal > 0 ? (modal / totalModal) * 100 : 0;
+        const bagiHasil = totalModal > 0 ? (modal / totalModal) * hasilUsahaNum : 0;
+        const ket = item.keterangan ? String(item.keterangan).trim() : null;
+
+        await conn.query(
+          `INSERT INTO investment_investors (investment_id, nama_investor, modal_serta, persentase, bagi_hasil, keterangan, urutan)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [id, nama, modal, persentase, bagiHasil, ket, i]
+        );
+      }
+
+      await conn.commit();
+
+      const [savedInv] = await pool.query('SELECT * FROM investments WHERE id = ?', [id]);
+      const [savedInvestors] = await pool.query(
+        'SELECT * FROM investment_investors WHERE investment_id = ? ORDER BY urutan ASC, id ASC',
+        [id]
+      );
+
+      const out = investmentRowOut(savedInv[0]);
+      out.investors = savedInvestors.map(investorRowOut);
+      res.json(out);
+    } catch (e) {
+      await conn.rollback();
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    } finally {
+      conn.release();
+    }
+  }
+);
+
+app.delete(
+  '/api/investments/:id',
+  authMiddleware,
+  requireRole('owner', 'supervisor'),
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!id) return res.status(400).json({ message: 'ID tidak valid' });
+
+      const [r] = await pool.query('DELETE FROM investments WHERE id = ?', [id]);
+      if (r.affectedRows === 0) {
+        return res.status(404).json({ message: 'Data investasi tidak ditemukan' });
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
 // --- Dashboard ringkas ---
 app.get('/api/dashboard/summary', authMiddleware, async (req, res) => {
   try {

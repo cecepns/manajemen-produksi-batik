@@ -7,6 +7,7 @@ export const ROUTES = {
   myTasks: '/tugas-saya',
   hppCalculator: '/kalkulator-hpp',
   dailyCashbook: '/kas-harian',
+  investments: '/investasi',
   newProducts: '/produk-baru',
   adminUsers: '/admin/pengguna',
 };

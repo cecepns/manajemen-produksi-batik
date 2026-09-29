@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Camera,
+  Coins,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../constants/routes';
@@ -112,6 +113,12 @@ export function MainLayout() {
               <NavLink to={ROUTES.dailyCashbook} className={linkClass} onClick={closeMobileMenu}>
                 <Wallet className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
                 <span>Kas harian</span>
+              </NavLink>
+            )}
+            {manager && (
+              <NavLink to={ROUTES.investments} className={linkClass} onClick={closeMobileMenu}>
+                <Coins className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+                <span>Investasi</span>
               </NavLink>
             )}
             {owner && (
