@@ -251,29 +251,43 @@ export function FashionPage() {
     }
   }
 
+  if (!manager) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+        <Shirt className="mx-auto h-12 w-12 text-slate-300" />
+        <h3 className="mt-3 text-base font-semibold text-slate-800">Akses Terbatas</h3>
+        <p className="mt-1 text-sm text-slate-500">
+          Menu Direktori Fashion hanya dapat diakses oleh Supervisor dan Owner.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-12">
+    <div className="mx-auto w-full max-w-7xl min-w-0 space-y-4 sm:space-y-6 pb-12">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-batik-indigo text-white shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-batik-indigo text-white shadow-sm">
               <Shirt className="h-5 w-5" aria-hidden />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-batik-ink">Direktori Fashion</h1>
-              <p className="text-xs text-batik-indigo/70 sm:text-sm">
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-bold tracking-tight text-batik-ink sm:text-2xl">
+                Direktori Fashion
+              </h1>
+              <p className="line-clamp-2 text-xs text-batik-indigo/70 sm:text-sm">
                 Katalog & arsip produk fashion yang kita produksi (5 foto dalam 1 lembar tampilan)
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="w-full sm:w-auto flex shrink-0 items-center">
           <button
             type="button"
             onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-xl bg-batik-indigo px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-batik-teal"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-batik-indigo px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-batik-teal"
           >
             <Plus className="h-4 w-4" aria-hidden />
             Tambah produk fashion
@@ -282,10 +296,10 @@ export function FashionPage() {
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1">
+      <div className="flex flex-col gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-3.5">
+        <div className="relative min-w-0 flex-1">
           <Search
-            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
             aria-hidden
           />
           <input
@@ -298,8 +312,8 @@ export function FashionPage() {
                 applySearch();
               }
             }}
-            placeholder="Cari nama produk, penjahit, jenis bahan, atau catatan…"
-            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-900 outline-none ring-batik-teal/30 placeholder:text-slate-400 focus:ring-2"
+            placeholder="Cari nama produk, penjahit, jenis bahan…"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 outline-none ring-batik-teal/30 placeholder:text-slate-400 focus:ring-2"
           />
           {qDraft && (
             <button
@@ -312,13 +326,13 @@ export function FashionPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="w-full sm:w-auto flex shrink-0 items-center">
           <button
             type="button"
             onClick={applySearch}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-100 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
           >
-            <Search className="h-4 w-4 text-slate-500" />
+            <Search className="h-3.5 w-3.5 text-slate-500" />
             Cari
           </button>
         </div>
@@ -346,7 +360,7 @@ export function FashionPage() {
           </button>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 w-full min-w-0">
           {items.map((item) => {
             const photos = [item.foto1_url, item.foto2_url, item.foto3_url, item.foto4_url, item.foto5_url];
             const topPhotos = photos.slice(0, 3);
@@ -358,37 +372,37 @@ export function FashionPage() {
             return (
               <div
                 key={item.id}
-                className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm transition hover:shadow-md"
+                className="group relative flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm transition hover:shadow-md"
               >
                 {/* Header Card */}
-                <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/60 p-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/60 p-3 sm:p-4">
+                  <div className="min-w-0 flex-1 pr-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <span className="inline-flex rounded-md bg-batik-indigo/10 px-2 py-0.5 text-xs font-semibold text-batik-indigo">
                         #{item.id}
                       </span>
                       {item.waktu_produksi && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-amber-200/70">
-                          <Clock className="h-3 w-3" />
-                          {item.waktu_produksi}
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200/70">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          <span className="truncate max-w-[120px]">{item.waktu_produksi}</span>
                         </span>
                       )}
                     </div>
-                    <h3 className="mt-1.5 truncate text-lg font-bold text-batik-ink" title={item.nama_produk}>
+                    <h3 className="mt-1.5 truncate text-base font-bold text-batik-ink sm:text-lg" title={item.nama_produk}>
                       {item.nama_produk}
                     </h3>
-                    <p className="text-xs text-slate-500">
+                    <p className="truncate text-xs text-slate-500">
                       Oleh <span className="font-medium text-slate-700">{item.created_by_username || 'Admin'}</span> · {formatDate(item.created_at)}
                     </p>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
                     <button
                       type="button"
                       title="Lihat 1 lembar penuh / cetak"
                       onClick={() => setSheetViewItem(item)}
-                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-batik-indigo"
+                      className="rounded-lg p-1.5 sm:p-2 text-slate-500 transition hover:bg-slate-100 hover:text-batik-indigo"
                     >
                       <Maximize2 className="h-4 w-4" />
                     </button>
@@ -397,7 +411,7 @@ export function FashionPage() {
                         type="button"
                         title="Edit produk"
                         onClick={() => openEditModal(item)}
-                        className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-batik-indigo"
+                        className="rounded-lg p-1.5 sm:p-2 text-slate-500 transition hover:bg-slate-100 hover:text-batik-indigo"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -407,7 +421,7 @@ export function FashionPage() {
                         type="button"
                         title="Hapus produk"
                         onClick={() => handleDelete(item)}
-                        className="rounded-lg p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                        className="rounded-lg p-1.5 sm:p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -415,13 +429,13 @@ export function FashionPage() {
                   </div>
                 </div>
 
-                {/* 5-Photo Gallery Grid (Persis seperti sketsa: 3 foto atas + 2 foto bawah) */}
-                <div className="border-b border-slate-100 bg-slate-100/50 p-3">
-                  <div className="grid grid-cols-3 gap-2">
+                {/* 5-Photo Gallery Grid (3 foto atas + 2 foto bawah) */}
+                <div className="w-full min-w-0 border-b border-slate-100 bg-slate-100/50 p-2 sm:p-3">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full min-w-0">
                     {topPhotos.map((url, i) => (
                       <div
                         key={i}
-                        className="group/img relative aspect-[3/4] overflow-hidden rounded-xl border border-slate-200/80 bg-white"
+                        className="group/img relative w-full min-w-0 aspect-[3/4] overflow-hidden rounded-lg sm:rounded-xl border border-slate-200/80 bg-white"
                       >
                         {url ? (
                           <>
@@ -435,29 +449,29 @@ export function FashionPage() {
                               onClick={() => setLightboxUrl(assetUrl(url))}
                               className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover/img:opacity-100"
                             >
-                              <Maximize2 className="h-5 w-5 text-white drop-shadow" />
+                              <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5 text-white drop-shadow" />
                             </button>
-                            <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] font-medium text-white">
+                            <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] sm:text-[10px] font-medium text-white">
                               Foto {i + 1}
                             </span>
                           </>
                         ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center text-center text-xs text-slate-400">
-                            <ImageIcon className="h-5 w-5 opacity-40" />
-                            <span className="mt-1 text-[10px]">Foto {i + 1}</span>
+                          <div className="flex h-full w-full flex-col items-center justify-center p-1 text-center text-xs text-slate-400">
+                            <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 opacity-40" />
+                            <span className="mt-0.5 text-[9px] sm:text-[10px]">Foto {i + 1}</span>
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="mt-1.5 sm:mt-2 grid grid-cols-2 gap-1.5 sm:gap-2 w-full min-w-0">
                     {bottomPhotos.map((url, i) => {
                       const slotNum = i + 4;
                       return (
                         <div
                           key={slotNum}
-                          className="group/img relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-200/80 bg-white"
+                          className="group/img relative w-full min-w-0 aspect-[4/3] overflow-hidden rounded-lg sm:rounded-xl border border-slate-200/80 bg-white"
                         >
                           {url ? (
                             <>
@@ -471,16 +485,16 @@ export function FashionPage() {
                                 onClick={() => setLightboxUrl(assetUrl(url))}
                                 className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover/img:opacity-100"
                               >
-                                <Maximize2 className="h-5 w-5 text-white drop-shadow" />
+                                <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5 text-white drop-shadow" />
                               </button>
-                              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] font-medium text-white">
+                              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] sm:text-[10px] font-medium text-white">
                                 Foto {slotNum}
                               </span>
                             </>
                           ) : (
-                            <div className="flex h-full w-full flex-col items-center justify-center text-center text-xs text-slate-400">
-                              <ImageIcon className="h-5 w-5 opacity-40" />
-                              <span className="mt-1 text-[10px]">Foto {slotNum}</span>
+                            <div className="flex h-full w-full flex-col items-center justify-center p-1 text-center text-xs text-slate-400">
+                              <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 opacity-40" />
+                              <span className="mt-0.5 text-[9px] sm:text-[10px]">Foto {slotNum}</span>
                             </div>
                           )}
                         </div>
@@ -490,52 +504,52 @@ export function FashionPage() {
                 </div>
 
                 {/* Body Details: Harga, Penjahit, Bahan, Harga Jahit, Harga Jual, Keterangan */}
-                <div className="flex flex-1 flex-col justify-between p-4">
-                  <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-                    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
-                      <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
-                        <User className="h-3 w-3 text-batik-teal" />
+                <div className="flex flex-1 flex-col justify-between p-3 sm:p-4">
+                  <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 sm:gap-3">
+                    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/70 p-2 sm:p-2.5">
+                      <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-slate-500">
+                        <User className="h-3 w-3 shrink-0 text-batik-teal" />
                         Penjahit
                       </span>
-                      <p className="mt-1 font-semibold text-slate-800">
+                      <p className="mt-0.5 truncate font-semibold text-slate-800" title={item.penjahit || '—'}>
                         {item.penjahit || '—'}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
-                      <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
-                        <Layers className="h-3 w-3 text-batik-indigo" />
+                    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/70 p-2 sm:p-2.5">
+                      <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-slate-500">
+                        <Layers className="h-3 w-3 shrink-0 text-batik-indigo" />
                         Jenis Bahan
                       </span>
-                      <p className="mt-1 font-semibold text-slate-800">
+                      <p className="mt-0.5 truncate font-semibold text-slate-800" title={item.jenis_bahan || '—'}>
                         {item.jenis_bahan || '—'}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
-                      <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
-                        <DollarSign className="h-3 w-3 text-amber-600" />
+                    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/70 p-2 sm:p-2.5">
+                      <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-slate-500">
+                        <DollarSign className="h-3 w-3 shrink-0 text-amber-600" />
                         Harga Modal
                       </span>
-                      <p className="mt-1 font-semibold text-slate-800">
+                      <p className="mt-0.5 truncate font-semibold text-slate-800">
                         {item.harga != null ? formatIdr(item.harga) : '—'}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
-                      <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
-                        <Scissors className="h-3 w-3 text-purple-600" />
+                    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/70 p-2 sm:p-2.5">
+                      <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-slate-500">
+                        <Scissors className="h-3 w-3 shrink-0 text-purple-600" />
                         Harga Jahit
                       </span>
-                      <p className="mt-1 font-semibold text-slate-800">
+                      <p className="mt-0.5 truncate font-semibold text-slate-800">
                         {item.harga_jahit != null ? formatIdr(item.harga_jahit) : '—'}
                       </p>
                     </div>
 
-                    <div className="col-span-2 rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-800">
-                          <Sparkles className="h-3 w-3 text-emerald-600" />
+                    <div className="col-span-2 min-w-0 rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-2 sm:p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-1">
+                        <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-emerald-800">
+                          <Sparkles className="h-3 w-3 shrink-0 text-emerald-600" />
                           Harga Jual
                         </span>
                         {margin != null && margin > 0 && (
@@ -544,20 +558,20 @@ export function FashionPage() {
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-sm font-bold text-emerald-950">
+                      <p className="mt-0.5 truncate text-xs sm:text-sm font-bold text-emerald-950">
                         {item.harga_jual != null ? formatIdr(item.harga_jual) : '—'}
                       </p>
                     </div>
                   </div>
 
                   {item.keterangan && (
-                    <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 text-xs text-slate-600">
+                    <div className="mt-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2 sm:p-2.5 text-xs text-slate-600 break-words">
                       <span className="font-semibold text-slate-700">Keterangan: </span>
                       {item.keterangan}
                     </div>
                   )}
 
-                  <div className="mt-4 flex items-center justify-end">
+                  <div className="mt-3 flex items-center justify-end">
                     <button
                       type="button"
                       onClick={() => setSheetViewItem(item)}
@@ -576,31 +590,31 @@ export function FashionPage() {
 
       {/* Pagination */}
       {!loading && total > 0 && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-slate-500">
-            Menampilkan data produk ({total} total produk fashion)
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3 sm:px-4 sm:py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="truncate text-center text-xs text-slate-500 sm:text-left">
+            Menampilkan {total} total produk fashion
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full sm:w-auto items-center justify-between gap-1 sm:justify-center sm:gap-2">
             <button
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+              className="inline-flex h-8 sm:h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs sm:text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
             >
-              <ChevronLeft className="h-4 w-4" />
-              Sebelumnya
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>Sebelumnya</span>
             </button>
-            <span className="min-w-[7rem] text-center text-sm text-slate-600">
-              Halaman {page} / {totalPages}
+            <span className="px-1 text-center text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
+              Hal {page} / {totalPages}
             </span>
             <button
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+              className="inline-flex h-8 sm:h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs sm:text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
             >
-              Berikutnya
-              <ChevronRight className="h-4 w-4" />
+              <span>Berikutnya</span>
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </button>
           </div>
         </div>
@@ -608,20 +622,20 @@ export function FashionPage() {
 
       {/* MODAL: Tambah / Edit Produk Fashion (dengan 5 slot foto & compress) */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4 backdrop-blur-sm">
           <div className="absolute inset-0" onClick={resetForm} />
           <form
             onSubmit={handleSave}
-            className="relative flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            className="relative flex max-h-[92vh] w-full max-w-3xl min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-batik-indigo text-white">
                   <Shirt className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-batik-ink">
+                  <h2 className="text-base sm:text-lg font-bold text-batik-ink">
                     {editingItem ? 'Edit Produk Fashion' : 'Tambah Produk Fashion Baru'}
                   </h2>
                   <p className="text-xs text-slate-500">
@@ -639,7 +653,7 @@ export function FashionPage() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
               {/* 5 Foto Upload Slots */}
               <div className="mb-6">
                 <div className="flex items-center justify-between">
@@ -842,19 +856,19 @@ export function FashionPage() {
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
               <button
                 type="button"
                 onClick={resetForm}
                 disabled={saving || compressing}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 Batal
               </button>
               <button
                 type="submit"
                 disabled={saving || compressing}
-                className="inline-flex items-center gap-2 rounded-xl bg-batik-indigo px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-batik-teal disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-batik-indigo px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-batik-teal disabled:opacity-60"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 {saving ? 'Menyimpan…' : editingItem ? 'Simpan Perubahan' : 'Simpan Produk Fashion'}
@@ -866,26 +880,26 @@ export function FashionPage() {
 
       {/* MODAL: 1 LEMBAR PENUH (Sheet View / Cetak Sesuai Gambar Sketsa) */}
       {sheetViewItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-2 sm:p-4 backdrop-blur-sm">
           <div className="absolute inset-0" onClick={() => setSheetViewItem(null)} />
           <div
-            className="relative flex max-h-[95vh] w-full max-w-4xl flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl print:m-0 print:max-h-none print:w-full print:border-none print:shadow-none"
+            className="relative flex max-h-[95vh] w-full max-w-4xl min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3 sm:p-6 shadow-2xl print:m-0 print:max-h-none print:w-full print:border-none print:shadow-none"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 print:hidden">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-3 print:hidden">
               <div className="flex items-center gap-2">
                 <Shirt className="h-5 w-5 text-batik-indigo" />
-                <span className="font-semibold text-batik-ink">Lembar Produk Fashion (1 Lembar Penuh)</span>
+                <span className="text-sm sm:text-base font-semibold text-batik-ink">Lembar Produk Fashion</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <Printer className="h-3.5 w-3.5" />
-                  Cetak Lembar
+                  <span className="hidden sm:inline">Cetak</span> Lembar
                 </button>
                 <button
                   type="button"
@@ -898,8 +912,8 @@ export function FashionPage() {
             </div>
 
             {/* Modal Body / Sheet View (Exact Match to User Sketch) */}
-            <div className="flex-1 overflow-y-auto pt-4 print:overflow-visible">
-              <div className="rounded-2xl border-2 border-slate-200/90 bg-white p-6 shadow-sm">
+            <div className="flex-1 overflow-y-auto pt-3 sm:pt-4 print:overflow-visible">
+              <div className="rounded-2xl border border-slate-200/90 sm:border-2 bg-white p-3.5 sm:p-6 shadow-sm min-w-0">
                 <div className="mb-4 flex items-start justify-between border-b border-slate-200 pb-3">
                   <div>
                     <span className="text-xs font-semibold uppercase tracking-wider text-batik-teal">

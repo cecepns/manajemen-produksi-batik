@@ -58,7 +58,7 @@ export function MainLayout() {
         }`}
       >
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-white/10 p-4 md:block md:border-0">
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 p-4 md:block md:border-0">
             <div className="flex items-center gap-3 md:block">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white md:mb-3 md:h-11 md:w-11">
                 <Factory className="h-5 w-5 md:h-6 md:w-6" aria-hidden />
@@ -81,7 +81,7 @@ export function MainLayout() {
               <X className="h-5 w-5" aria-hidden />
             </button>
           </div>
-          <nav className="flex flex-col gap-0.5 px-3 py-4">
+          <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col gap-0.5 px-3 py-3">
             <NavLink to={ROUTES.dashboard} className={linkClass} end onClick={closeMobileMenu}>
               <LayoutDashboard className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
               <span>Dashboard</span>
@@ -104,10 +104,12 @@ export function MainLayout() {
               <Camera className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
               <span>Produk baru</span>
             </NavLink>
-            <NavLink to={ROUTES.fashion} className={linkClass} onClick={closeMobileMenu}>
-              <Shirt className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
-              <span>Fashion</span>
-            </NavLink>
+            {manager && (
+              <NavLink to={ROUTES.fashion} className={linkClass} onClick={closeMobileMenu}>
+                <Shirt className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+                <span>Fashion</span>
+              </NavLink>
+            )}
             {manager && (
               <NavLink to={ROUTES.hppCalculator} className={linkClass} onClick={closeMobileMenu}>
                 <Calculator className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
@@ -133,7 +135,7 @@ export function MainLayout() {
               </NavLink>
             )}
           </nav>
-          <div className="mt-auto border-t border-white/10 p-4">
+          <div className="shrink-0 border-t border-white/10 bg-batik-indigo p-4">
             <p className="truncate text-sm font-medium text-white">{user?.username}</p>
             <p className="text-xs capitalize text-white/60">{user?.role}</p>
             <button
@@ -147,8 +149,8 @@ export function MainLayout() {
           </div>
         </div>
       </aside>
-      <div className="min-h-screen w-full md:pl-60">
-        <div className="flex min-h-screen flex-col bg-slate-50">
+      <div className="min-h-screen w-full max-w-full overflow-x-hidden md:pl-60">
+        <div className="flex min-h-screen w-full max-w-full flex-col overflow-x-hidden bg-slate-50">
           <header className="flex items-center justify-between border-b border-slate-200/80 bg-white px-4 py-3 md:hidden">
             <button
               type="button"
@@ -161,7 +163,7 @@ export function MainLayout() {
             <span className="text-sm font-semibold text-slate-900">{user?.username}</span>
             <span className="w-10" aria-hidden />
           </header>
-          <main className="flex-1 p-4 md:p-8">
+          <main className="flex-1 w-full max-w-full overflow-x-hidden p-3 sm:p-4 md:p-8">
             <Outlet context={{ user, manager, owner }} />
           </main>
         </div>

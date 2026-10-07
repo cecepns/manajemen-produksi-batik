@@ -1670,7 +1670,7 @@ function canEditFashion(user, row) {
   return Number(user.sub) === Number(row.created_by);
 }
 
-app.get('/api/fashion', authMiddleware, async (req, res) => {
+app.get('/api/fashion', authMiddleware, requireRole('owner', 'supervisor'), async (req, res) => {
   try {
     const pageRaw = Number(req.query.page);
     const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1;
@@ -1735,7 +1735,7 @@ app.get('/api/fashion', authMiddleware, async (req, res) => {
   }
 });
 
-app.get('/api/fashion/:id', authMiddleware, async (req, res) => {
+app.get('/api/fashion/:id', authMiddleware, requireRole('owner', 'supervisor'), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: 'ID tidak valid' });
@@ -1755,7 +1755,7 @@ app.get('/api/fashion/:id', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/fashion', authMiddleware, uploadFashionPhotos, async (req, res) => {
+app.post('/api/fashion', authMiddleware, requireRole('owner', 'supervisor'), uploadFashionPhotos, async (req, res) => {
   const files = req.files || {};
   const f1 = files.foto1?.[0];
   const f2 = files.foto2?.[0];
@@ -1846,7 +1846,7 @@ app.post('/api/fashion', authMiddleware, uploadFashionPhotos, async (req, res) =
   }
 });
 
-app.patch('/api/fashion/:id', authMiddleware, uploadFashionPhotos, async (req, res) => {
+app.patch('/api/fashion/:id', authMiddleware, requireRole('owner', 'supervisor'), uploadFashionPhotos, async (req, res) => {
   const files = req.files || {};
   const f1 = files.foto1?.[0];
   const f2 = files.foto2?.[0];
