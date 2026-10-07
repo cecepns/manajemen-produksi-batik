@@ -366,6 +366,42 @@ app.delete('/api/admin/users/:id', authMiddleware, requireRole('owner'), async (
 });
 
 // --- Orders ---
+async function enrichOrdersWithImagesAndSteps(ordersList) {
+  if (!ordersList || ordersList.length === 0) return ordersList;
+  const orderIds = ordersList.map((o) => o.id);
+  const [images] = await pool.query(
+    `SELECT order_id, image_url, jenis
+       FROM order_images
+      WHERE order_id IN (?) AND jenis = 'foto_awal'
+      ORDER BY id ASC`,
+    [orderIds]
+  );
+  const [steps] = await pool.query(
+    `SELECT ws.id, ws.order_id, ws.nama_step, ws.status, ws.cuaca, u.username AS worker_name
+       FROM workflow_steps ws
+       LEFT JOIN users u ON u.id = ws.assigned_worker_id
+      WHERE ws.order_id IN (?)
+      ORDER BY ws.id ASC`,
+    [orderIds]
+  );
+
+  const imagesByOrder = {};
+  for (const img of images) {
+    if (!imagesByOrder[img.order_id]) imagesByOrder[img.order_id] = [];
+    imagesByOrder[img.order_id].push(img);
+  }
+  const stepsByOrder = {};
+  for (const st of steps) {
+    if (!stepsByOrder[st.order_id]) stepsByOrder[st.order_id] = [];
+    stepsByOrder[st.order_id].push(st);
+  }
+  for (const o of ordersList) {
+    o.foto_awal = imagesByOrder[o.id]?.[0]?.image_url || null;
+    o.workflow_steps = stepsByOrder[o.id] || [];
+  }
+  return ordersList;
+}
+
 app.get('/api/orders', authMiddleware, async (req, res) => {
   try {
     const { role } = req.user;
@@ -431,6 +467,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
           LIMIT ? OFFSET ?`,
         [...params, limit, nextOffset]
       );
+      await enrichOrdersWithImagesAndSteps(rows);
       return res.json({
         data: rows,
         total,
@@ -489,6 +526,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
           LIMIT ? OFFSET ?`,
         [...params, limit, nextOffset]
       );
+      await enrichOrdersWithImagesAndSteps(rows);
       return res.json({
         data: rows,
         total,
@@ -1603,6 +1641,336 @@ app.delete('/api/new-products/:id', authMiddleware, requireRole('owner', 'superv
       unlinkUploadByUrl(u);
     }
     await pool.query('DELETE FROM new_product_records WHERE id = ?', [id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// --- Modul Fashion (Direktori produk fashion dengan 5 slot foto) ---
+const uploadFashionPhotos = multer({
+  storage,
+  limits: { files: 5, fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype);
+    cb(ok ? null : new Error('Hanya gambar (jpeg, png, webp, gif)'), ok);
+  },
+}).fields([
+  { name: 'foto1', maxCount: 1 },
+  { name: 'foto2', maxCount: 1 },
+  { name: 'foto3', maxCount: 1 },
+  { name: 'foto4', maxCount: 1 },
+  { name: 'foto5', maxCount: 1 },
+]);
+
+function canEditFashion(user, row) {
+  if (!user || !row) return false;
+  if (isManager(user.role)) return true;
+  return Number(user.sub) === Number(row.created_by);
+}
+
+app.get('/api/fashion', authMiddleware, async (req, res) => {
+  try {
+    const pageRaw = Number(req.query.page);
+    const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1;
+    const limitRaw = Number(req.query.limit);
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw >= 1 ? Math.min(24, Math.floor(limitRaw)) : 12;
+    const offset = (page - 1) * limit;
+
+    const qRaw = String(req.query.q ?? req.query.search ?? '').trim();
+    let searchClause = '';
+    const searchParams = [];
+    if (qRaw) {
+      const safe = qRaw.replace(/[%_\\]/g, ' ').trim();
+      if (safe) {
+        const pat = `%${safe}%`;
+        searchClause = `WHERE (
+          f.nama_produk LIKE ? OR
+          f.penjahit LIKE ? OR
+          f.jenis_bahan LIKE ? OR
+          f.keterangan LIKE ? OR
+          u.username LIKE ?
+        )`;
+        searchParams.push(pat, pat, pat, pat, pat);
+      }
+    }
+
+    const [[countRow]] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM fashion_products f
+       JOIN users u ON u.id = f.created_by
+       ${searchClause}`,
+      searchParams
+    );
+    const total = Number(countRow?.total) || 0;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    const [rows] = await pool.query(
+      `SELECT f.*, u.username AS created_by_username
+       FROM fashion_products f
+       JOIN users u ON u.id = f.created_by
+       ${searchClause}
+       ORDER BY f.created_at DESC, f.id DESC
+       LIMIT ? OFFSET ?`,
+      [...searchParams, limit, offset]
+    );
+
+    res.json({
+      data: rows,
+      total,
+      page,
+      limit,
+      totalPages,
+    });
+  } catch (e) {
+    console.error(e);
+    if (e.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(503).json({
+        message: 'Tabel fashion belum dibuat. Jalankan database_migration_fashion.sql.',
+      });
+    }
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.get('/api/fashion/:id', authMiddleware, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: 'ID tidak valid' });
+    const [rows] = await pool.query(
+      `SELECT f.*, u.username AS created_by_username
+       FROM fashion_products f
+       JOIN users u ON u.id = f.created_by
+       WHERE f.id = ?`,
+      [id]
+    );
+    const row = rows[0];
+    if (!row) return res.status(404).json({ message: 'Produk fashion tidak ditemukan' });
+    res.json(row);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.post('/api/fashion', authMiddleware, uploadFashionPhotos, async (req, res) => {
+  const files = req.files || {};
+  const f1 = files.foto1?.[0];
+  const f2 = files.foto2?.[0];
+  const f3 = files.foto3?.[0];
+  const f4 = files.foto4?.[0];
+  const f5 = files.foto5?.[0];
+
+  const cleanup = () => {
+    for (const f of [f1, f2, f3, f4, f5]) {
+      if (f?.filename) unlinkUploadByUrl(`/uploads/${f.filename}`);
+    }
+  };
+
+  try {
+    const b = req.body || {};
+    const namaProduk = String(b.nama_produk || '').trim();
+    if (!namaProduk) {
+      cleanup();
+      return res.status(400).json({ message: 'Nama produk wajib diisi' });
+    }
+
+    const numOrNull = (k) => {
+      const v = b[k];
+      if (v == null || String(v).trim() === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const strOrNull = (k, max = 255) => {
+      const v = b[k];
+      if (v == null) return null;
+      const t = String(v).trim();
+      return t ? t.slice(0, max) : null;
+    };
+    const textOrNull = (k) => {
+      const v = b[k];
+      if (v == null) return null;
+      const t = String(v).trim();
+      return t ? t.slice(0, 8000) : null;
+    };
+
+    const foto1Url = f1 ? `/uploads/${f1.filename}` : null;
+    const foto2Url = f2 ? `/uploads/${f2.filename}` : null;
+    const foto3Url = f3 ? `/uploads/${f3.filename}` : null;
+    const foto4Url = f4 ? `/uploads/${f4.filename}` : null;
+    const foto5Url = f5 ? `/uploads/${f5.filename}` : null;
+
+    const [r] = await pool.query(
+      `INSERT INTO fashion_products (
+        created_by, nama_produk, harga, penjahit, jenis_bahan,
+        harga_jahit, harga_jual, waktu_produksi, keterangan,
+        foto1_url, foto2_url, foto3_url, foto4_url, foto5_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.sub,
+        namaProduk.slice(0, 255),
+        numOrNull('harga'),
+        strOrNull('penjahit'),
+        strOrNull('jenis_bahan'),
+        numOrNull('harga_jahit'),
+        numOrNull('harga_jual'),
+        strOrNull('waktu_produksi'),
+        textOrNull('keterangan'),
+        foto1Url,
+        foto2Url,
+        foto3Url,
+        foto4Url,
+        foto5Url,
+      ]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT f.*, u.username AS created_by_username
+       FROM fashion_products f
+       JOIN users u ON u.id = f.created_by
+       WHERE f.id = ?`,
+      [r.insertId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    cleanup();
+    if (e.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(503).json({
+        message: 'Tabel fashion belum dibuat. Jalankan database_migration_fashion.sql.',
+      });
+    }
+    res.status(500).json({ message: e.message || 'Server error' });
+  }
+});
+
+app.patch('/api/fashion/:id', authMiddleware, uploadFashionPhotos, async (req, res) => {
+  const files = req.files || {};
+  const f1 = files.foto1?.[0];
+  const f2 = files.foto2?.[0];
+  const f3 = files.foto3?.[0];
+  const f4 = files.foto4?.[0];
+  const f5 = files.foto5?.[0];
+
+  const cleanupNewFiles = () => {
+    for (const f of [f1, f2, f3, f4, f5]) {
+      if (f?.filename) unlinkUploadByUrl(`/uploads/${f.filename}`);
+    }
+  };
+
+  try {
+    const id = Number(req.params.id);
+    if (!id) {
+      cleanupNewFiles();
+      return res.status(400).json({ message: 'ID tidak valid' });
+    }
+    const [existing] = await pool.query('SELECT * FROM fashion_products WHERE id = ?', [id]);
+    const row = existing[0];
+    if (!row) {
+      cleanupNewFiles();
+      return res.status(404).json({ message: 'Data tidak ditemukan' });
+    }
+    if (!canEditFashion(req.user, row)) {
+      cleanupNewFiles();
+      return res.status(403).json({ message: 'Akses ditolak' });
+    }
+
+    const b = req.body || {};
+    const updates = [];
+    const params = [];
+
+    const str = (k, col, max = 255) => {
+      if (k in b) {
+        const v = b[k];
+        const val = v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max);
+        updates.push(`${col} = ?`);
+        params.push(val);
+      }
+    };
+    const num = (k, col) => {
+      if (k in b) {
+        const v = b[k];
+        const val = v == null || String(v).trim() === '' ? null : Number(v);
+        updates.push(`${col} = ?`);
+        params.push(Number.isFinite(val) ? val : null);
+      }
+    };
+    const textLong = (k, col) => {
+      if (k in b) {
+        const v = b[k];
+        const val = v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, 8000);
+        updates.push(`${col} = ?`);
+        params.push(val);
+      }
+    };
+
+    str('nama_produk', 'nama_produk', 255);
+    num('harga', 'harga');
+    str('penjahit', 'penjahit', 255);
+    str('jenis_bahan', 'jenis_bahan', 255);
+    num('harga_jahit', 'harga_jahit');
+    num('harga_jual', 'harga_jual');
+    str('waktu_produksi', 'waktu_produksi', 255);
+    textLong('keterangan', 'keterangan');
+
+    // Handle new photos uploaded
+    const photoSlots = [
+      { file: f1, col: 'foto1_url', old: row.foto1_url },
+      { file: f2, col: 'foto2_url', old: row.foto2_url },
+      { file: f3, col: 'foto3_url', old: row.foto3_url },
+      { file: f4, col: 'foto4_url', old: row.foto4_url },
+      { file: f5, col: 'foto5_url', old: row.foto5_url },
+    ];
+    for (const slot of photoSlots) {
+      if (slot.file) {
+        if (slot.old) unlinkUploadByUrl(slot.old);
+        updates.push(`${slot.col} = ?`);
+        params.push(`/uploads/${slot.file.filename}`);
+      } else if (b[`delete_${slot.col}`] === '1') {
+        if (slot.old) unlinkUploadByUrl(slot.old);
+        updates.push(`${slot.col} = NULL`);
+      }
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ message: 'Tidak ada perubahan' });
+    }
+
+    params.push(id);
+    await pool.query(
+      `UPDATE fashion_products SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+
+    const [rows] = await pool.query(
+      `SELECT f.*, u.username AS created_by_username
+       FROM fashion_products f
+       JOIN users u ON u.id = f.created_by
+       WHERE f.id = ?`,
+      [id]
+    );
+    res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    cleanupNewFiles();
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.delete('/api/fashion/:id', authMiddleware, requireRole('owner', 'supervisor'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [existing] = await pool.query('SELECT * FROM fashion_products WHERE id = ?', [id]);
+    const row = existing[0];
+    if (!row) return res.status(404).json({ message: 'Data tidak ditemukan' });
+
+    for (const u of [row.foto1_url, row.foto2_url, row.foto3_url, row.foto4_url, row.foto5_url]) {
+      unlinkUploadByUrl(u);
+    }
+
+    await pool.query('DELETE FROM fashion_products WHERE id = ?', [id]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

@@ -15,13 +15,81 @@ import {
   Camera,
   Images,
   Search,
+  Maximize2,
 } from 'lucide-react';
 import { confirmWithToast } from '../utils/toastConfirm';
 import { compressOrderPhoto } from '../utils/compressOrderPhoto';
-import { api } from '../services/api';
+import { api, assetUrl } from '../services/api';
 import { ROUTES } from '../constants/routes';
 import { formatDate, toYmdLocal } from '../utils/formatDate';
 import 'react-datepicker/dist/react-datepicker.css';
+
+function StepStatusPipeline({ steps = [], totalSteps = 0, doneSteps = 0 }) {
+  if (Array.isArray(steps) && steps.length > 0) {
+    return (
+      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+        {steps.map((st) => {
+          const name =
+            st.nama_step
+              ?.replace(/^tahap\s+/i, '')
+              ?.trim() || st.nama_step || 'Tahap';
+
+          let tone = 'bg-slate-100 text-slate-600 ring-slate-200';
+          let dot = 'bg-slate-400';
+          let statusLabel = 'Antre';
+
+          if (st.status === 'done') {
+            tone = 'bg-emerald-50 text-emerald-800 ring-emerald-300 font-semibold';
+            dot = 'bg-emerald-500';
+            statusLabel = 'Selesai';
+          } else if (st.status === 'progress') {
+            tone = 'bg-amber-50 text-amber-900 ring-amber-300 font-semibold animate-pulse';
+            dot = 'bg-amber-500';
+            statusLabel = 'Sedang dikerjakan';
+          }
+
+          return (
+            <span
+              key={st.id || st.nama_step}
+              title={`${st.nama_step}: ${statusLabel}${st.worker_name ? ` · PJ: ${st.worker_name}` : ''}`}
+              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] ring-1 ring-inset ${tone}`}
+            >
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+              <span className="capitalize">{name}</span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (totalSteps > 0) {
+    const isDone = doneSteps >= totalSteps;
+    const isProgress = doneSteps > 0 && doneSteps < totalSteps;
+    return (
+      <div className="mt-1.5 flex items-center">
+        <span
+          className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] ring-1 ring-inset ${
+            isDone
+              ? 'bg-emerald-50 text-emerald-800 ring-emerald-300 font-semibold'
+              : isProgress
+              ? 'bg-amber-50 text-amber-900 ring-amber-300 font-semibold'
+              : 'bg-slate-100 text-slate-600 ring-slate-200'
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+              isDone ? 'bg-emerald-500' : isProgress ? 'bg-amber-500' : 'bg-slate-400'
+            }`}
+          />
+          <span>{doneSteps}/{totalSteps} Tahap</span>
+        </span>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 registerLocale('id', localeId);
 
@@ -111,6 +179,7 @@ export function OrdersPage() {
   const [downloadingReport, setDownloadingReport] = useState(false);
   const cameraStreamRef = useRef(null);
   const cameraVideoRef = useRef(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
 
   const createFotoPreviewUrls = useMemo(
     () => createFotoAwal.map((f) => URL.createObjectURL(f)),
@@ -590,30 +659,76 @@ export function OrdersPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">No pesanan</th>
+                  <th className="px-4 py-3">No</th>
                   <th className="px-4 py-3">Nama pesanan / pemesan</th>
-                  <th className="px-4 py-3">Tanggal</th>
-                  <th className="px-4 py-3">Deadline</th>
+                  <th className="px-4 py-3">Tanggal & Deadline</th>
                   <th className="px-4 py-3">Jumlah</th>
                   <th className="px-4 py-3">PJ</th>
-                  <th className="px-4 py-3 max-w-[200px]">Keterangan</th>
                   <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {orders.map((o) => (
                   <tr key={o.id} className={`transition ${orderRowToneClass(o.id)}`}>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-batik-indigo/10 px-2.5 py-1 text-xs font-semibold text-batik-indigo">
-                        #{o.id}
-                      </span>
+                    <td className="px-4 py-3 align-top">
+                      <div className="flex items-start gap-3">
+                        {/* Foto awal produk pesanan (thumbnail disamping no) */}
+                        <div className="relative shrink-0">
+                          {o.foto_awal ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLightboxPhoto({
+                                  url: assetUrl(o.foto_awal),
+                                  title: `${o.nama_usaha || 'Pesanan'} #${o.id} · ${o.nama_pemesan}`,
+                                })
+                              }
+                              className="group relative block h-14 w-14 overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm transition hover:ring-2 hover:ring-batik-teal"
+                              title="Klik untuk melihat foto lebih besar"
+                            >
+                              <img
+                                src={assetUrl(o.foto_awal)}
+                                alt="Foto produk"
+                                className="h-full w-full object-cover transition duration-150 group-hover:scale-105"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover:opacity-100">
+                                <Maximize2 className="h-4 w-4 text-white drop-shadow" />
+                              </div>
+                            </button>
+                          ) : (
+                            <div
+                              className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 text-slate-400"
+                              title="Belum ada foto pesanan"
+                            >
+                              <Camera className="h-5 w-5 opacity-40" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Nomor Pesanan & Indikator Warna Tahapan */}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex rounded-md bg-batik-indigo/10 px-2 py-0.5 text-xs font-bold text-batik-indigo">
+                              #{o.id}
+                            </span>
+                          </div>
+
+                          {/* Indikator lampu/tanda warna tahapan: Cap, Warna, Finish */}
+                          <StepStatusPipeline
+                            steps={o.workflow_steps}
+                            totalSteps={o.total_steps}
+                            doneSteps={o.done_steps}
+                          />
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
+
+                    <td className="px-4 py-3 align-top">
                       <p className="text-xs font-medium uppercase tracking-wide text-batik-teal/90">
                         {o.nama_usaha || 'Batik Binar'}
                       </p>
-                      <p className="font-medium text-batik-ink">{o.nama_pemesan}</p>
-                      <p className="mt-1 text-xs text-batik-indigo/70">
+                      <p className="font-semibold text-batik-ink">{o.nama_pemesan}</p>
+                      <p className="mt-0.5 text-xs text-batik-indigo/70">
                         {o.nomor_telepon_pelanggan?.trim() || 'Tanpa nomor telepon'}
                       </p>
                       <p className="mt-1 text-xs leading-snug text-batik-indigo/70">
@@ -629,24 +744,34 @@ export function OrdersPage() {
                         {o.ukuran_jahit?.trim() || '—'}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-batik-indigo/80">{formatDate(o.tanggal_pesanan)}</td>
-                    <td className="px-4 py-3 text-batik-indigo/80">{formatDate(o.deadline)}</td>
-                    <td className="px-4 py-3">{o.jumlah}</td>
-                    <td className="px-4 py-3 text-batik-indigo/80">{o.penanggung_jawab}</td>
-                    <td className="max-w-[200px] px-4 py-3 text-batik-indigo/75">
-                      {o.keterangan?.trim() ? (
-                        <span className="line-clamp-2" title={o.keterangan}>
-                          {o.keterangan}
-                        </span>
-                      ) : (
-                        <span className="text-batik-indigo/40">—</span>
-                      )}
+
+                    {/* Tanggal dan deadline dalam 1 lajur digabung */}
+                    <td className="px-4 py-3 align-top text-xs">
+                      <div className="space-y-1">
+                        <div className="text-slate-600">
+                          <span className="font-medium text-slate-400">Pesan:</span>{' '}
+                          {formatDate(o.tanggal_pesanan)}
+                        </div>
+                        <div className="font-semibold text-slate-800">
+                          <span className="font-medium text-slate-400">Deadline:</span>{' '}
+                          {formatDate(o.deadline)}
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
+
+                    <td className="px-4 py-3 align-top font-semibold text-slate-800">
+                      {o.jumlah} pcs
+                    </td>
+
+                    <td className="px-4 py-3 align-top text-xs text-batik-indigo/80">
+                      {o.penanggung_jawab}
+                    </td>
+
+                    <td className="px-4 py-3 align-top text-right">
                       <div className="flex flex-wrap items-center justify-end gap-1">
                         <Link
                           to={ROUTES.orderDetail(o.id)}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-batik-teal hover:bg-teal-50 hover:underline"
+                          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-batik-teal hover:bg-teal-50 hover:underline"
                         >
                           Detail
                           <ChevronRight className="h-4 w-4" aria-hidden />
@@ -657,7 +782,7 @@ export function OrdersPage() {
                             title="Ubah pesanan"
                             disabled={editFetchId === o.id}
                             onClick={() => openEditModal(o.id)}
-                            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-batik-indigo disabled:opacity-50"
+                            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-batik-indigo disabled:opacity-50"
                           >
                             <Pencil className="h-4 w-4" aria-hidden />
                           </button>
@@ -667,7 +792,7 @@ export function OrdersPage() {
                             type="button"
                             title="Hapus pesanan"
                             onClick={() => requestDeleteOrder(o)}
-                            className="rounded-lg p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
                           >
                             <Trash2 className="h-4 w-4" aria-hidden />
                           </button>
@@ -1063,6 +1188,37 @@ export function OrdersPage() {
             >
               Ambil foto
             </button>
+          </div>
+        </div>
+      )}
+
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <div
+            className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setLightboxPhoto(null)}
+              className="absolute -top-10 right-0 rounded-full bg-white/20 p-2 text-white hover:bg-white/40"
+              title="Tutup foto"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={lightboxPhoto.url}
+              alt={lightboxPhoto.title || 'Foto pesanan'}
+              className="max-h-[80vh] max-w-[85vw] rounded-2xl object-contain shadow-2xl"
+            />
+            {lightboxPhoto.title && (
+              <p className="mt-3 text-center text-sm font-medium text-white/90">
+                {lightboxPhoto.title}
+              </p>
+            )}
           </div>
         </div>
       )}

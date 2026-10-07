@@ -9,5 +9,6 @@ export const ROUTES = {
   dailyCashbook: '/kas-harian',
   investments: '/investasi',
   newProducts: '/produk-baru',
+  fashion: '/fashion',
   adminUsers: '/admin/pengguna',
 };

@@ -14,6 +14,7 @@ import {
   X,
   Camera,
   Coins,
+  Shirt,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../constants/routes';
@@ -102,6 +103,10 @@ export function MainLayout() {
             <NavLink to={ROUTES.newProducts} className={linkClass} onClick={closeMobileMenu}>
               <Camera className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
               <span>Produk baru</span>
+            </NavLink>
+            <NavLink to={ROUTES.fashion} className={linkClass} onClick={closeMobileMenu}>
+              <Shirt className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+              <span>Fashion</span>
             </NavLink>
             {manager && (
               <NavLink to={ROUTES.hppCalculator} className={linkClass} onClick={closeMobileMenu}>

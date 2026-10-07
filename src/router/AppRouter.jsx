@@ -13,6 +13,7 @@ import { HppCalculatorPage } from '../pages/HppCalculatorPage';
 import { DailyCashbookPage } from '../pages/DailyCashbookPage';
 import { InvestmentPage } from '../pages/InvestmentPage';
 import { NewProductsPage } from '../pages/NewProductsPage';
+import { FashionPage } from '../pages/FashionPage';
 import { UsersAdminPage } from '../pages/UsersAdminPage';
 import { ROUTES } from '../constants/routes';
 
@@ -57,6 +58,7 @@ export function AppRouter() {
           <Route path={ROUTES.dailyCashbook} element={<DailyCashbookPage />} />
           <Route path={ROUTES.investments} element={<InvestmentPage />} />
           <Route path={ROUTES.newProducts} element={<NewProductsPage />} />
+          <Route path={ROUTES.fashion} element={<FashionPage />} />
           <Route path="/gaji-harian" element={<Navigate to={ROUTES.dailyCashbook} replace />} />
           <Route path={ROUTES.adminUsers} element={<UsersAdminPage />} />
         </Route>
